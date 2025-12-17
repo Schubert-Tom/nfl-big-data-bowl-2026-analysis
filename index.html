@@ -14,6 +14,15 @@
     label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; }
     .meta { opacity: 0.8; font-size: 0.95rem; }
 
+    .desc{
+      border: 1px solid #9996;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 1.02rem;
+      line-height: 1.35;
+      opacity: 0.95;
+    }
+
     .layout { display: grid; gap: 14px; grid-template-columns: 420px 1fr; align-items: start; }
     @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
 
@@ -47,10 +56,9 @@
     .viewerHeader .name { font-weight: 650; }
     .viewerHeader .hint { opacity: 0.75; font-size: 0.95rem; }
 
-    /* "Not scrollable" container: no per-card iframes anymore; and disable iframe scrolling */
     iframe {
       width: 100%;
-      height: 800px;
+      height: 1000px;
       border: 0;
       border-radius: 10px;
       background: #00000008;
@@ -77,9 +85,13 @@
       <label title="Preview height">
         Height
         <select id="height">
-          <option value="800" selected>800px</option>
+          <option value="1000" selected>1000px</option>
+          <option value="1200">1200px</option>
+          <option value="900">900px</option>
+          <option value="800">800px</option>
           <option value="720">720px</option>
           <option value="600">600px</option>
+          <option value="480">480px</option>
           <option value="360">360px</option>
         </select>
       </label>
@@ -89,8 +101,13 @@
     </div>
 
     <div id="error" class="err hidden"></div>
+
     <div class="hint meta">
       Reads <span class="pill">/figures/*.html</span> via GitHub API for the file list, then loads the actual page via a relative link like <span class="pill">figures/your_plot.html</span>.
+    </div>
+
+    <div class="desc">
+      This gallery visualizes a kinematics-based coverage model for NFL plays. For each player, a personalized motion model estimates the region they can reach over time based on their current speed and heading. Combined with a quarterback throw-time and throw-distance model, the plots highlight how pass targets evolve across the field for both offense and defense. Blue indicates low offensive risk (offense arrives first), white is neutral (simultaneous arrival), and red indicates higher risk where defenders have the time advantage.
     </div>
   </header>
 
@@ -188,14 +205,13 @@
     function updateViewer() {
       const showPreview = els.preview.checked;
 
-      // If preview is off or nothing selected, hide the viewer
       if (!showPreview || !selectedFile) {
         els.viewer.classList.add("hidden");
         els.viewerFrame.removeAttribute("src");
         return;
       }
 
-      const h = Number(els.height.value) || 800;
+      const h = Number(els.height.value) || 1000;
       const href = `figures/${encodeURIComponent(selectedFile)}`;
 
       els.viewer.classList.remove("hidden");
@@ -203,7 +219,6 @@
       els.viewerHint.textContent = href;
       els.viewerFrame.style.height = `${h}px`;
 
-      // Only load/update iframe for the selected plot
       if (els.viewerFrame.getAttribute("src") !== href) {
         els.viewerFrame.setAttribute("src", href);
       }
@@ -225,7 +240,6 @@
         `;
       }).join("");
 
-      // Keep viewer in sync after filtering
       updateViewer();
     }
 
@@ -246,7 +260,6 @@
         const branch = await fetchDefaultBranch(owner, repo);
         allFiles = await fetchFiguresList(owner, repo, branch);
 
-        // Auto-select the first file if nothing selected (or if selection disappeared)
         if (!selectedFile || !allFiles.includes(selectedFile)) {
           selectedFile = allFiles[0] || null;
         }
@@ -279,6 +292,16 @@
       if (!card) return;
       const file = card.getAttribute("data-file");
       if (file) selectFile(file);
+    });
+
+    // Double-click: open plot in a new tab
+    els.grid.addEventListener("dblclick", (ev) => {
+      const card = ev.target.closest(".card");
+      if (!card) return;
+      const file = card.getAttribute("data-file");
+      if (!file) return;
+      const href = `figures/${encodeURIComponent(file)}`;
+      window.open(href, "_blank", "noopener");
     });
 
     // Keyboard accessibility
