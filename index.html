@@ -339,7 +339,7 @@
       // ---- Ensure the plot has room for colorbar on the right (heatmap "legend") ----
       const layout = Object.assign({}, fig.layout || {});
       layout.autosize = true;
-      layout.margin = Object.assign({ l: 60, r: 140, t: 40, b: 60 }, layout.margin || {});
+      layout.margin = Object.assign({}, layout.margin || {}, { l: 60, r: 140, t: 40, b: 60 });
 
       // If your JSON uses `coloraxis`, keep the colorbar from being clipped:
       if (layout.coloraxis && !layout.coloraxis.colorbar) {
