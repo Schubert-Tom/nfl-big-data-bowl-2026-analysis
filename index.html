@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plotly Gallery</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    header { display: grid; gap: 12px; margin-bottom: 16px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    input[type="search"] { padding: 10px 12px; min-width: 260px; border-radius: 10px; border: 1px solid #9996; }
+    button, select, label { border-radius: 10px; border: 1px solid #9996; padding: 10px 12px; background: transparent; }
+    label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; }
+    .meta { opacity: 0.8; font-size: 0.95rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+    .card { border: 1px solid #9996; border-radius: 14px; padding: 12px; }
+    .title { font-weight: 650; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 10px; }
+    .title a { text-decoration: none; }
+    .title small { opacity: 0.75; font-weight: 500; }
+    iframe { width: 100%; height: 360px; border: 0; border-radius: 10px; background: #00000008; }
+    .err { border: 1px solid #c33; padding: 12px; border-radius: 12px; }
+    .hint { opacity: 0.85; }
+    .pill { font-size: 12px; padding: 4px 8px; border: 1px solid #9996; border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 style="margin:0;">Plotly Gallery</h1>
+
+    <div class="row">
+      <input id="q" type="search" placeholder="Search figures…" />
+      <label title="Toggle iframe previews (can be heavy for many plots)">
+        <input id="preview" type="checkbox" checked />
+        Preview
+      </label>
+
+      <label title="Iframe height">
+        Height
+        <select id="height">
+          <option value="260">260px</option>
+          <option value="360" selected>360px</option>
+          <option value="520">520px</option>
+          <option value="720">720px</option>
+        </select>
+      </label>
+
+      <button id="reload" type="button">Reload list</button>
+      <span id="status" class="meta"></span>
+    </div>
+
+    <div id="error" class="err" style="display:none;"></div>
+    <div class="hint meta">
+      Reads <span class="pill">/figures/*.html</span> via GitHub API for the file list, then loads the actual pages via relative links like <span class="pill">figures/your_plot.html</span>.
+    </div>
+  </header>
+
+  <main>
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <script>
+    const els = {
+      q: document.getElementById("q"),
+      preview: document.getElementById("preview"),
+      height: document.getElementById("height"),
+      reload: document.getElementById("reload"),
+      status: document.getElementById("status"),
+      error: document.getElementById("error"),
+      grid: document.getElementById("grid"),
+    };
+
+    let allFiles = [];
+
+    function inferOwnerRepo() {
+      // Works for:
+      // - project pages: https://<owner>.github.io/<repo>/
+      // - user pages:    https://<owner>.github.io/
+      const host = location.hostname;               // "<owner>.github.io"
+      const owner = host.split(".")[0] || "";
+      const parts = location.pathname.split("/").filter(Boolean);
+
+      // If path starts with repo, it's project pages; otherwise user pages.
+      // For user pages, repo is typically "<owner>.github.io".
+      const repo = parts.length ? parts[0] : `${owner}.github.io`;
+
+      // Base path for relative links to figures:
+      // - project pages: "/<repo>/"
+      // - user pages:    "/"
+      const basePath = parts.length ? `/${repo}/` : `/`;
+
+      return { owner, repo, basePath };
+    }
+
+    async function fetchDefaultBranch(owner, repo) {
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: { "Accept": "application/vnd.github+json" }
+      });
+      if (!r.ok) throw new Error(`GitHub repo lookup failed (${r.status})`);
+      const j = await r.json();
+      return j.default_branch || "main";
+    }
+
+    async function fetchFiguresList(owner, repo, branch) {
+      // Lists /figures directory contents (non-recursive)
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/figures?ref=${encodeURIComponent(branch)}`;
+      const r = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
+      if (!r.ok) throw new Error(`GitHub contents API failed (${r.status}). Does /figures exist?`);
+      const j = await r.json();
+
+      const htmlFiles = (Array.isArray(j) ? j : [])
+        .filter(x => x && x.type === "file" && typeof x.name === "string" && x.name.toLowerCase().endsWith(".html"))
+        .map(x => x.name)
+        .sort((a,b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+
+      return htmlFiles;
+    }
+
+    function render() {
+      const query = els.q.value.trim().toLowerCase();
+      const showPreview = els.preview.checked;
+      const h = Number(els.height.value) || 360;
+
+      const files = allFiles.filter(name => name.toLowerCase().includes(query));
+
+      els.status.textContent = `${files.length} / ${allFiles.length} figures`;
+
+      els.grid.innerHTML = files.map(name => {
+        const title = name.replace(/\.html$/i, "");
+        const href = `figures/${encodeURIComponent(name)}`;
+        return `
+          <div class="card">
+            <div class="title">
+              <a href="${href}" target="_blank" rel="noopener">${escapeHtml(title)}</a>
+              <small>${escapeHtml(name)}</small>
+            </div>
+            ${showPreview ? `<iframe src="${href}" loading="lazy" style="height:${h}px;"></iframe>` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function showError(msg) {
+      els.error.style.display = "block";
+      els.error.innerHTML = `
+        <div><strong>Could not auto-list figures.</strong></div>
+        <div style="margin-top:6px;">${escapeHtml(msg)}</div>
+        <div class="hint" style="margin-top:10px;">
+          Make sure your repo has a <code>figures/</code> folder, is public (or you’re not hitting API limits),
+          and GitHub Pages is serving the same branch.
+        </div>
+      `;
+    }
+
+    async function load() {
+      els.error.style.display = "none";
+      els.status.textContent = "Loading…";
+
+      try {
+        const { owner, repo } = inferOwnerRepo();
+        if (!owner || !repo) throw new Error("Could not infer owner/repo from URL.");
+
+        const branch = await fetchDefaultBranch(owner, repo);
+        const files = await fetchFiguresList(owner, repo, branch);
+
+        allFiles = files;
+        render();
+
+        if (!files.length) {
+          showError("No .html files found in /figures.");
+        }
+      } catch (e) {
+        allFiles = [];
+        els.grid.innerHTML = "";
+        els.status.textContent = "";
+        showError(e?.message || String(e));
+      }
+    }
+
+    // UI hooks
+    els.q.addEventListener("input", render);
+    els.preview.addEventListener("change", render);
+    els.height.addEventListener("change", render);
+    els.reload.addEventListener("click", load);
+
+    load();
+  </script>
+</body>
+</html>
