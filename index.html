@@ -370,7 +370,7 @@
 
         delete tr.coloraxis; // ensure trace uses its own colorscale
         tr.colorscale = RDBU;
-        tr.reversescale = true;
+        tr.reversescale = false;
         tr.showscale = true;
 
         tr.colorbar = {
@@ -393,7 +393,7 @@
           if (!tr || tr.type !== "heatmap") continue;
           delete tr.coloraxis;
           tr.colorscale = RDBU;
-          tr.reversescale = true;
+          tr.reversescale = false;
           tr.showscale = true;
           tr.colorbar = {
             ...(tr.colorbar || {}),
@@ -413,6 +413,7 @@
         { responsive: true, displaylogo: false },
         (fig.config || {})
       );
+      Plotly.purge(els.plot);
 
       // Render (use the correct Plotly.react signature)
       await Plotly.react(els.plot, data, layout, config);
