@@ -118,19 +118,32 @@
     <div id="error" class="err hidden"></div>
 
     <div class="desc">
-      <h2>🏈 Kinematics-Based Coverage Gallery</h2>
-      <p>
-        This gallery renders <strong>Plotly JSON</strong> figures from <code>figures/*.json</code> using a single Plotly runtime.
-      </p>
-      <ul>
-        <li><strong>Desktop:</strong> click to preview, double-click to open plot-only tab.</li>
-        <li><strong>Mobile:</strong> preview is disabled; tapping a play opens a new tab.</li>
-      </ul>
-      <hr />
-      <div class="hint">
-        Listing order: <code>figures/manifest.json</code> → GitHub API → hardcoded fallback list.
-      </div>
-    </div>
+        <h2>🏈 Kinematics-Based Coverage Gallery</h2>
+
+        <h3>What this is</h3>
+        <p>
+            This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.
+        </p>
+
+        <p>
+            For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:
+        </p>
+        <ul>
+            <li>current speed</li>
+            <li>heading / direction</li>
+        </ul>
+
+        <p>
+            Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.
+        </p>
+        <hr />
+        <h3>How to read the colors (risk map)</h3>
+        <ul>
+            <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
+            <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
+            <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
+        </ul>
+        <hr />
   </header>
 
   <main class="layout">
