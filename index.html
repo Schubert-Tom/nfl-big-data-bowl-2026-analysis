@@ -120,19 +120,15 @@
     <div class="desc">
       <h2>🏈 Kinematics-Based Coverage Gallery</h2>
       <p>
-        This gallery renders <strong>Plotly JSON</strong> figures from <code>figures/*.json</code> using a single Plotly runtime
-        (smoother than iframes).
+        This gallery renders <strong>Plotly JSON</strong> figures from <code>figures/*.json</code> using a single Plotly runtime.
       </p>
       <ul>
         <li><strong>Desktop:</strong> click to preview, double-click to open plot-only tab.</li>
         <li><strong>Mobile:</strong> preview is disabled; tapping a play opens a new tab.</li>
       </ul>
-
       <hr />
-
       <div class="hint">
-        Recommended: create <code>figures/manifest.json</code> with a JSON array of filenames, e.g.
-        <code>["play_001.json","play_002.json"]</code> to avoid GitHub API rate limits.
+        Listing order: <code>figures/manifest.json</code> → GitHub API → hardcoded fallback list.
       </div>
     </div>
   </header>
@@ -172,11 +168,19 @@
       mobileMaxWidth: 980
     };
 
+    // ✅ Hardcoded fallback list (used if manifest + GitHub API both fail)
+    const FALLBACK_FILES = [
+      "2023090700_1001.json",
+      "2023090700_1300.json",
+      "2023090700_1618.json",
+      "2023090700_1837.json",
+    ];
+
     let allFiles = [];
     let selectedFile = null;
 
     const params = new URLSearchParams(location.search);
-    const plotParam = params.get("plot"); // e.g. play_001.json
+    const plotParam = params.get("plot"); // e.g. 2023090700_1001.json
     if (plotParam) document.documentElement.classList.add("plot-only");
 
     function isMobile() {
@@ -206,8 +210,7 @@
         <div><strong>Error</strong></div>
         <div style="margin-top:6px;">${escapeHtml(msg)}</div>
         <div class="hint" style="margin-top:10px;">
-          If listing fails due to GitHub API limits, add <code>${escapeHtml(CONFIG.manifestPath)}</code>
-          containing a JSON array of your <code>.json</code> files.
+          Using hardcoded fallback list if needed.
         </div>
       `;
     }
@@ -242,7 +245,7 @@
       const reset = r.headers.get("x-ratelimit-reset");
       if (r.status === 403 && remaining === "0" && reset) {
         const when = new Date(Number(reset) * 1000).toLocaleString();
-        return `GitHub API rate limit hit (403). Try again after ${when} or add figures/manifest.json.`;
+        return `GitHub API rate limit hit (403). Try again after ${when} or rely on figures/manifest.json.`;
       }
       return null;
     }
@@ -306,7 +309,6 @@
 
       const fig = await r.json();
 
-      // Build a full figure object with frames (critical)
       const figure = {
         data: fig.data || [],
         layout: fig.layout || {},
@@ -318,7 +320,6 @@
         (fig.config || {})
       );
 
-      // Pass figure object directly so Plotly receives frames
       await Plotly.react(els.plot, figure, config);
     }
 
@@ -354,47 +355,66 @@
         els.preview.disabled = false;
       }
 
+      let listSource = "";
+
       try {
+        // 1) Try manifest.json first
         const manifest = await fetchManifestList();
         if (manifest && manifest.length) {
           allFiles = manifest;
-        } else if (CONFIG.githubApiFallback) {
-          const { owner, repo } = inferOwnerRepo();
-          if (!owner || !repo) {
-            throw new Error("No manifest.json found and cannot infer GitHub owner/repo (custom domain?). Add figures/manifest.json.");
-          }
-          allFiles = await fetchFiguresListFromGitHub(owner, repo);
+          listSource = "manifest.json";
         } else {
-          throw new Error("No manifest.json found. Create figures/manifest.json with your .json filenames.");
-        }
-
-        if (plotParam && allFiles.includes(plotParam)) {
-          selectedFile = plotParam;
-        } else {
-          selectedFile = allFiles[0] || null;
-        }
-
-        renderList();
-
-        if (!allFiles.length) {
-          showError("No .json files found in /figures (or manifest is empty).");
-          els.status.textContent = "0 plays";
-          return;
-        }
-
-        // Plot-only mode: render immediately
-        if (plotParam && selectedFile) {
-          els.viewer.classList.remove("hidden");
-          await renderPlotFromJson(selectedFile);
-          updateViewerVisibility();
+          throw new Error("manifest.json missing or empty");
         }
       } catch (e) {
-        allFiles = [];
-        selectedFile = null;
-        els.grid.innerHTML = "";
-        els.status.textContent = "";
-        els.viewer.classList.add("hidden");
-        showError(e?.message || String(e));
+        // 2) Fallback to GitHub API (may rate-limit)
+        if (CONFIG.githubApiFallback) {
+          try {
+            const { owner, repo } = inferOwnerRepo();
+            if (!owner || !repo) throw new Error("Cannot infer owner/repo (custom domain?)");
+            allFiles = await fetchFiguresListFromGitHub(owner, repo);
+            listSource = "GitHub API";
+          } catch (e2) {
+            // 3) Hardcoded fallback list
+            allFiles = sortFiles(FALLBACK_FILES);
+            listSource = "hardcoded fallback";
+            showError((e2?.message || String(e2)) + " — using fallback list.");
+          }
+        } else {
+          // 3) Hardcoded fallback list
+          allFiles = sortFiles(FALLBACK_FILES);
+          listSource = "hardcoded fallback";
+          showError((e?.message || String(e)) + " — using fallback list.");
+        }
+      }
+
+      // Choose selection
+      if (plotParam && allFiles.includes(plotParam)) {
+        selectedFile = plotParam;
+      } else {
+        selectedFile = allFiles[0] || null;
+      }
+
+      renderList();
+
+      if (!allFiles.length) {
+        showError("No .json files available.");
+        els.status.textContent = "0 plays";
+        return;
+      }
+
+      // Add list source hint
+      els.status.textContent = `${allFiles.length} plays • source: ${listSource}`;
+
+      // Plot-only mode: render immediately
+      if (plotParam && selectedFile) {
+        els.viewer.classList.remove("hidden");
+        try {
+          await renderPlotFromJson(selectedFile);
+          updateViewerVisibility();
+        } catch (e) {
+          showError(e?.message || String(e));
+        }
       }
     }
 
