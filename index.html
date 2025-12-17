@@ -393,7 +393,7 @@
           if (!tr || tr.type !== "heatmap") continue;
           delete tr.coloraxis;
           tr.colorscale = RDBU;
-          tr.reversescale = false;
+          tr.reversescale = true;
           tr.showscale = true;
           tr.colorbar = {
             ...(tr.colorbar || {}),
