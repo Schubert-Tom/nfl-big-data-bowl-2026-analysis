@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Plotly Gallery</title>
+  <title>Kinematic Based Coverage and Risk Analysis</title>
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
@@ -13,15 +13,54 @@
     button, select, label { border-radius: 10px; border: 1px solid #9996; padding: 10px 12px; background: transparent; }
     label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; }
     .meta { opacity: 0.8; font-size: 0.95rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
-    .card { border: 1px solid #9996; border-radius: 14px; padding: 12px; }
-    .title { font-weight: 650; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 10px; }
-    .title a { text-decoration: none; }
-    .title small { opacity: 0.75; font-weight: 500; }
-    iframe { width: 100%; height: 360px; border: 0; border-radius: 10px; background: #00000008; }
+
+    .layout { display: grid; gap: 14px; grid-template-columns: 420px 1fr; align-items: start; }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .card {
+      border: 1px solid #9996;
+      border-radius: 14px;
+      padding: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .card:hover { filter: brightness(1.03); }
+    .card.selected { outline: 2px solid #6aa6ff66; }
+
+    .title { font-weight: 650; margin: 0; }
+
+    .viewer {
+      border: 1px solid #9996;
+      border-radius: 14px;
+      padding: 12px;
+      position: sticky;
+      top: 16px;
+    }
+    .viewerHeader {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .viewerHeader .name { font-weight: 650; }
+    .viewerHeader .hint { opacity: 0.75; font-size: 0.95rem; }
+
+    /* "Not scrollable" container: no per-card iframes anymore; and disable iframe scrolling */
+    iframe {
+      width: 100%;
+      height: 800px;
+      border: 0;
+      border-radius: 10px;
+      background: #00000008;
+      overflow: hidden;
+    }
+
     .err { border: 1px solid #c33; padding: 12px; border-radius: 12px; }
     .hint { opacity: 0.85; }
     .pill { font-size: 12px; padding: 4px 8px; border: 1px solid #9996; border-radius: 999px; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
@@ -30,18 +69,18 @@
 
     <div class="row">
       <input id="q" type="search" placeholder="Search figures…" />
-      <label title="Toggle iframe previews (can be heavy for many plots)">
+      <label title="Show a single preview for the selected figure">
         <input id="preview" type="checkbox" checked />
         Preview
       </label>
 
-      <label title="Iframe height">
+      <label title="Preview height">
         Height
         <select id="height">
-          <option value="260">260px</option>
-          <option value="360" selected>360px</option>
-          <option value="520">520px</option>
+          <option value="800" selected>800px</option>
           <option value="720">720px</option>
+          <option value="600">600px</option>
+          <option value="360">360px</option>
         </select>
       </label>
 
@@ -49,14 +88,24 @@
       <span id="status" class="meta"></span>
     </div>
 
-    <div id="error" class="err" style="display:none;"></div>
+    <div id="error" class="err hidden"></div>
     <div class="hint meta">
-      Reads <span class="pill">/figures/*.html</span> via GitHub API for the file list, then loads the actual pages via relative links like <span class="pill">figures/your_plot.html</span>.
+      Reads <span class="pill">/figures/*.html</span> via GitHub API for the file list, then loads the actual page via a relative link like <span class="pill">figures/your_plot.html</span>.
     </div>
   </header>
 
-  <main>
-    <div id="grid" class="grid"></div>
+  <main class="layout">
+    <section>
+      <div id="grid" class="grid"></div>
+    </section>
+
+    <section id="viewer" class="viewer hidden">
+      <div class="viewerHeader">
+        <div class="name" id="viewerName"></div>
+        <div class="hint" id="viewerHint"></div>
+      </div>
+      <iframe id="viewerFrame" scrolling="no" loading="lazy"></iframe>
+    </section>
   </main>
 
   <script>
@@ -68,28 +117,21 @@
       status: document.getElementById("status"),
       error: document.getElementById("error"),
       grid: document.getElementById("grid"),
+      viewer: document.getElementById("viewer"),
+      viewerName: document.getElementById("viewerName"),
+      viewerHint: document.getElementById("viewerHint"),
+      viewerFrame: document.getElementById("viewerFrame"),
     };
 
     let allFiles = [];
+    let selectedFile = null;
 
     function inferOwnerRepo() {
-      // Works for:
-      // - project pages: https://<owner>.github.io/<repo>/
-      // - user pages:    https://<owner>.github.io/
       const host = location.hostname;               // "<owner>.github.io"
       const owner = host.split(".")[0] || "";
       const parts = location.pathname.split("/").filter(Boolean);
-
-      // If path starts with repo, it's project pages; otherwise user pages.
-      // For user pages, repo is typically "<owner>.github.io".
       const repo = parts.length ? parts[0] : `${owner}.github.io`;
-
-      // Base path for relative links to figures:
-      // - project pages: "/<repo>/"
-      // - user pages:    "/"
-      const basePath = parts.length ? `/${repo}/` : `/`;
-
-      return { owner, repo, basePath };
+      return { owner, repo };
     }
 
     async function fetchDefaultBranch(owner, repo) {
@@ -102,42 +144,19 @@
     }
 
     async function fetchFiguresList(owner, repo, branch) {
-      // Lists /figures directory contents (non-recursive)
       const url = `https://api.github.com/repos/${owner}/${repo}/contents/figures?ref=${encodeURIComponent(branch)}`;
       const r = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
       if (!r.ok) throw new Error(`GitHub contents API failed (${r.status}). Does /figures exist?`);
       const j = await r.json();
 
-      const htmlFiles = (Array.isArray(j) ? j : [])
+      return (Array.isArray(j) ? j : [])
         .filter(x => x && x.type === "file" && typeof x.name === "string" && x.name.toLowerCase().endsWith(".html"))
         .map(x => x.name)
         .sort((a,b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-
-      return htmlFiles;
     }
 
-    function render() {
-      const query = els.q.value.trim().toLowerCase();
-      const showPreview = els.preview.checked;
-      const h = Number(els.height.value) || 360;
-
-      const files = allFiles.filter(name => name.toLowerCase().includes(query));
-
-      els.status.textContent = `${files.length} / ${allFiles.length} figures`;
-
-      els.grid.innerHTML = files.map(name => {
-        const title = name.replace(/\.html$/i, "");
-        const href = `figures/${encodeURIComponent(name)}`;
-        return `
-          <div class="card">
-            <div class="title">
-              <a href="${href}" target="_blank" rel="noopener">${escapeHtml(title)}</a>
-              <small>${escapeHtml(name)}</small>
-            </div>
-            ${showPreview ? `<iframe src="${href}" loading="lazy" style="height:${h}px;"></iframe>` : ""}
-          </div>
-        `;
-      }).join("");
+    function nameFromFile(filename) {
+      return filename.replace(/\.html$/i, "");
     }
 
     function escapeHtml(s) {
@@ -150,7 +169,7 @@
     }
 
     function showError(msg) {
-      els.error.style.display = "block";
+      els.error.classList.remove("hidden");
       els.error.innerHTML = `
         <div><strong>Could not auto-list figures.</strong></div>
         <div style="margin-top:6px;">${escapeHtml(msg)}</div>
@@ -161,8 +180,63 @@
       `;
     }
 
+    function hideError() {
+      els.error.classList.add("hidden");
+      els.error.innerHTML = "";
+    }
+
+    function updateViewer() {
+      const showPreview = els.preview.checked;
+
+      // If preview is off or nothing selected, hide the viewer
+      if (!showPreview || !selectedFile) {
+        els.viewer.classList.add("hidden");
+        els.viewerFrame.removeAttribute("src");
+        return;
+      }
+
+      const h = Number(els.height.value) || 800;
+      const href = `figures/${encodeURIComponent(selectedFile)}`;
+
+      els.viewer.classList.remove("hidden");
+      els.viewerName.textContent = nameFromFile(selectedFile);
+      els.viewerHint.textContent = href;
+      els.viewerFrame.style.height = `${h}px`;
+
+      // Only load/update iframe for the selected plot
+      if (els.viewerFrame.getAttribute("src") !== href) {
+        els.viewerFrame.setAttribute("src", href);
+      }
+    }
+
+    function renderList() {
+      const query = els.q.value.trim().toLowerCase();
+      const files = allFiles.filter(name => name.toLowerCase().includes(query));
+
+      els.status.textContent = `${files.length} / ${allFiles.length} figures`;
+
+      els.grid.innerHTML = files.map(name => {
+        const title = nameFromFile(name);
+        const selected = (name === selectedFile) ? "selected" : "";
+        return `
+          <div class="card ${selected}" data-file="${escapeHtml(name)}" role="button" tabindex="0">
+            <p class="title">${escapeHtml(title)}</p>
+          </div>
+        `;
+      }).join("");
+
+      // Keep viewer in sync after filtering
+      updateViewer();
+    }
+
+    function selectFile(name) {
+      selectedFile = name;
+      renderList();
+      updateViewer();
+    }
+
     async function load() {
-      els.error.style.display = "none";
+      hideError();
       els.status.textContent = "Loading…";
 
       try {
@@ -170,27 +244,52 @@
         if (!owner || !repo) throw new Error("Could not infer owner/repo from URL.");
 
         const branch = await fetchDefaultBranch(owner, repo);
-        const files = await fetchFiguresList(owner, repo, branch);
+        allFiles = await fetchFiguresList(owner, repo, branch);
 
-        allFiles = files;
-        render();
+        // Auto-select the first file if nothing selected (or if selection disappeared)
+        if (!selectedFile || !allFiles.includes(selectedFile)) {
+          selectedFile = allFiles[0] || null;
+        }
 
-        if (!files.length) {
+        renderList();
+
+        if (!allFiles.length) {
           showError("No .html files found in /figures.");
+          els.status.textContent = "0 figures";
         }
       } catch (e) {
         allFiles = [];
+        selectedFile = null;
         els.grid.innerHTML = "";
         els.status.textContent = "";
+        els.viewer.classList.add("hidden");
         showError(e?.message || String(e));
       }
     }
 
     // UI hooks
-    els.q.addEventListener("input", render);
-    els.preview.addEventListener("change", render);
-    els.height.addEventListener("change", render);
+    els.q.addEventListener("input", renderList);
+    els.preview.addEventListener("change", updateViewer);
+    els.height.addEventListener("change", updateViewer);
     els.reload.addEventListener("click", load);
+
+    // Click-to-select (event delegation)
+    els.grid.addEventListener("click", (ev) => {
+      const card = ev.target.closest(".card");
+      if (!card) return;
+      const file = card.getAttribute("data-file");
+      if (file) selectFile(file);
+    });
+
+    // Keyboard accessibility
+    els.grid.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const card = ev.target.closest(".card");
+      if (!card) return;
+      ev.preventDefault();
+      const file = card.getAttribute("data-file");
+      if (file) selectFile(file);
+    });
 
     load();
   </script>
