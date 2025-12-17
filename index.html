@@ -100,14 +100,14 @@
       <label title="Preview height (desktop)">
         Height
         <select id="height">
-          <option value="900" selected >900px</option>
-          <option value="800">800px</option>
-          <option value="1000">1000px</option>
-          <option value="1200">1200px</option>
+          <option value="360">360px</option>
+          <option value="480">480px</option>
           <option value="720">720px</option>
           <option value="600">600px</option>
-          <option value="480">480px</option>
-          <option value="360">360px</option>
+          <option value="800" selected>800px</option>
+          <option value="900">900px</option>
+          <option value="1000">1000px</option>
+          <option value="1200">1200px</option>
         </select>
       </label>
 
@@ -293,7 +293,7 @@
       }
       els.viewer.classList.remove("hidden");
 
-      const h = Number(els.height.value) || 900;
+      const h = Number(els.height.value) || 800;
       els.plot.style.height = `${h}px`;
       if (window.Plotly) window.Plotly.Plots.resize(els.plot);
     }
