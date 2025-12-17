@@ -5,8 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Kinematic Based Coverage and Risk Analysis</title>
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    :root { color-scheme: dark; }
+    body {
+    background: #111;
+    color: #eee;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    margin: 24px;
+    }
     header { display: grid; gap: 12px; margin-bottom: 16px; }
     .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     input[type="search"] { padding: 10px 12px; min-width: 260px; border-radius: 10px; border: 1px solid #9996; }
@@ -132,13 +137,6 @@
   </ul>
 
   <hr />
-
-  <h3>Navigation / loading</h3>
-  <ul>
-    <li>The page reads <code>figures/*.html</code> via the <strong>GitHub API</strong> to build the file list.</li>
-    <li>Then it loads the selected plot via a relative link like <code>figures/your_plot.html</code>.</li>
-  </ul>
-</div>
 
   </header>
 
