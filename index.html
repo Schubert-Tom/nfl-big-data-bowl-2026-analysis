@@ -102,13 +102,44 @@
 
     <div id="error" class="err hidden"></div>
 
-    <div class="hint meta">
-      Reads <span class="pill">/figures/*.html</span> via GitHub API for the file list, then loads the actual page via a relative link like <span class="pill">figures/your_plot.html</span>.
-    </div>
-
     <div class="desc">
-      This gallery visualizes a kinematics-based coverage model for NFL plays. For each player, a personalized motion model estimates the region they can reach over time based on their current speed and heading. Combined with a quarterback throw-time and throw-distance model, the plots highlight how pass targets evolve across the field for both offense and defense. Blue indicates low offensive risk (offense arrives first), white is neutral (simultaneous arrival), and red indicates higher risk where defenders have the time advantage.
-    </div>
+  <h2>🏈 Kinematics-Based Coverage Gallery</h2>
+
+  <h3>What this is</h3>
+  <p>
+    This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.
+  </p>
+
+  <p>
+    For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:
+  </p>
+  <ul>
+    <li>current speed</li>
+    <li>heading / direction</li>
+  </ul>
+
+  <p>
+    Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.
+  </p>
+
+  <hr />
+
+  <h3>How to read the colors (risk map)</h3>
+  <ul>
+    <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
+    <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
+    <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
+  </ul>
+
+  <hr />
+
+  <h3>Navigation / loading</h3>
+  <ul>
+    <li>The page reads <code>figures/*.html</code> via the <strong>GitHub API</strong> to build the file list.</li>
+    <li>Then it loads the selected plot via a relative link like <code>figures/your_plot.html</code>.</li>
+  </ul>
+</div>
+
   </header>
 
   <main class="layout">
