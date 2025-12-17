@@ -271,7 +271,6 @@
 
       const h = Number(els.height.value) || 1000;
       els.plot.style.height = `${h}px`;
-      // Let Plotly resize into the new height
       if (window.Plotly) window.Plotly.Plots.resize(els.plot);
     }
 
@@ -294,6 +293,7 @@
       updateViewerVisibility();
     }
 
+    // ✅ IMPORTANT: keep frames for slider/animation interactivity
     async function renderPlotFromJson(filename) {
       if (!window.Plotly) throw new Error("Plotly failed to load (CDN blocked/offline).");
 
@@ -306,14 +306,20 @@
 
       const fig = await r.json();
 
-      // Support a few common JSON shapes:
-      // 1) {data, layout, config}
-      // 2) full Plotly schema exports that still have data/layout
-      const data = fig.data || [];
-      const layout = fig.layout || {};
-      const config = Object.assign({ responsive: true, displaylogo: false }, (fig.config || {}));
+      // Build a full figure object with frames (critical)
+      const figure = {
+        data: fig.data || [],
+        layout: fig.layout || {},
+        frames: fig.frames || []
+      };
 
-      await Plotly.react(els.plot, data, layout, config);
+      const config = Object.assign(
+        { responsive: true, displaylogo: false },
+        (fig.config || {})
+      );
+
+      // Pass figure object directly so Plotly receives frames
+      await Plotly.react(els.plot, figure, config);
     }
 
     async function selectFile(filename, {openInNewTab=false} = {}) {
@@ -340,7 +346,7 @@
       hideError();
       els.status.textContent = "Loading…";
 
-      // Mobile behavior: disable preview
+      // Mobile behavior: disable preview, open new tab on selection
       if (isMobile() && !plotParam) {
         els.preview.checked = false;
         els.preview.disabled = true;
@@ -362,7 +368,6 @@
           throw new Error("No manifest.json found. Create figures/manifest.json with your .json filenames.");
         }
 
-        // Choose initial selection
         if (plotParam && allFiles.includes(plotParam)) {
           selectedFile = plotParam;
         } else {
@@ -379,9 +384,9 @@
 
         // Plot-only mode: render immediately
         if (plotParam && selectedFile) {
-          els.preview.checked = true; // irrelevant in plot-only mode, but harmless
           els.viewer.classList.remove("hidden");
           await renderPlotFromJson(selectedFile);
+          updateViewerVisibility();
         }
       } catch (e) {
         allFiles = [];
@@ -454,7 +459,7 @@
       }
     });
 
-    // Handle resize: mobile/desktop toggle + plot resize
+    // Resize handling
     window.addEventListener("resize", () => {
       if (!plotParam) {
         if (isMobile()) {
