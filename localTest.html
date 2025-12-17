@@ -48,7 +48,33 @@
       [1.0, "rgb(178,24,43)"],    // red
     ];
 
-    function ensureSharedColoraxis(layout) {
+    function normalizeTitle(title) {
+      if (title == null) return undefined;
+      if (typeof title === "string") return { text: title };
+      if (typeof title === "object") return title; // already {text,...} usually
+      return undefined;
+    }
+
+    function extractColorbarText(fig) {
+      const data = Array.isArray(fig?.data) ? fig.data : [];
+      const srcHeatmap = data.find(t => t && t.type === "heatmap");
+      const srcCB = srcHeatmap?.colorbar || fig?.layout?.coloraxis?.colorbar || {};
+
+      return {
+        title: normalizeTitle(srcCB?.title),
+        tickmode: srcCB?.tickmode,
+        tickvals: srcCB?.tickvals,
+        ticktext: srcCB?.ticktext,
+        ticks: srcCB?.ticks,
+        tickformat: srcCB?.tickformat,
+        nticks: srcCB?.nticks,
+        // keep any other useful fields if present
+        tickprefix: srcCB?.tickprefix,
+        ticksuffix: srcCB?.ticksuffix,
+      };
+    }
+
+    function ensureSharedColoraxis(layout, savedCB) {
       layout.autosize = true;
 
       // IMPORTANT: make our margins win (room for colorbar + slider)
@@ -59,12 +85,32 @@
       layout.coloraxis.showscale = true;
       layout.coloraxis.colorscale = RDBU;
       layout.coloraxis.cmid = 0; // diverging midpoint
+      layout.coloraxis.reversescale = true;
+
+      // Merge saved text into the colorbar (so labels from JSON don't disappear)
+      const saved = savedCB || {};
+      const savedColorbarText = {
+        ...(saved.title ? { title: saved.title } : {}),
+        ...(saved.tickmode !== undefined ? { tickmode: saved.tickmode } : {}),
+        ...(saved.tickvals !== undefined ? { tickvals: saved.tickvals } : {}),
+        ...(saved.ticktext !== undefined ? { ticktext: saved.ticktext } : {}),
+        ...(saved.ticks !== undefined ? { ticks: saved.ticks } : {}),
+        ...(saved.tickformat !== undefined ? { tickformat: saved.tickformat } : {}),
+        ...(saved.nticks !== undefined ? { nticks: saved.nticks } : {}),
+        ...(saved.tickprefix !== undefined ? { tickprefix: saved.tickprefix } : {}),
+        ...(saved.ticksuffix !== undefined ? { ticksuffix: saved.ticksuffix } : {}),
+      };
+
       layout.coloraxis.colorbar = {
+        // keep any existing (if present)
+        ...(layout.coloraxis.colorbar || {}),
+        // restore text (from JSON)
+        ...savedColorbarText,
+        // enforce position/size (do last so it always wins)
         x: 1.0,
         xanchor: "left",
         thickness: 18,
         len: 0.9,
-        ...(layout.coloraxis.colorbar || {})
       };
 
       // keeps UI stable across slider/frame updates
@@ -93,8 +139,22 @@
       return false;
     }
 
-    function forceTraceToUseSharedColoraxis(tr) {
+    function forceTraceToUseSharedColoraxis(tr, savedCB) {
       if (!tr) return;
+
+      const saved = savedCB || {};
+      tr.reversescale = true;
+      const savedColorbarText = {
+        ...(saved.title ? { title: saved.title } : {}),
+        ...(saved.tickmode !== undefined ? { tickmode: saved.tickmode } : {}),
+        ...(saved.tickvals !== undefined ? { tickvals: saved.tickvals } : {}),
+        ...(saved.ticktext !== undefined ? { ticktext: saved.ticktext } : {}),
+        ...(saved.ticks !== undefined ? { ticks: saved.ticks } : {}),
+        ...(saved.tickformat !== undefined ? { tickformat: saved.tickformat } : {}),
+        ...(saved.nticks !== undefined ? { nticks: saved.nticks } : {}),
+        ...(saved.tickprefix !== undefined ? { tickprefix: saved.tickprefix } : {}),
+        ...(saved.ticksuffix !== undefined ? { ticksuffix: saved.ticksuffix } : {}),
+      };
 
       // Heatmap/contour/etc: link to shared coloraxis AND also set per-trace colorscale (belt+suspenders)
       if (tr.type && ["heatmap","contour","histogram2d","histogram2dcontour","image","surface",
@@ -105,15 +165,16 @@
 
         // If it renders per-trace (no shared axis), still force RdBu:
         tr.colorscale = RDBU;
-        tr.reversescale = false;
+        tr.reversescale = true;
 
-        // keep bar inside canvas
+        // keep bar inside canvas + restore labels
         tr.colorbar = {
+          ...(tr.colorbar || {}),
+          ...savedColorbarText,
           x: 1.0,
           xanchor: "left",
           thickness: 18,
           len: 0.9,
-          ...(tr.colorbar || {})
         };
         return;
       }
@@ -128,16 +189,17 @@
         tr.marker.reversescale = false;
 
         tr.marker.colorbar = {
+          ...(tr.marker.colorbar || {}),
+          ...savedColorbarText,
           x: 1.0,
           xanchor: "left",
           thickness: 18,
           len: 0.9,
-          ...(tr.marker.colorbar || {})
         };
       }
     }
 
-    function forceColorbarEverywhere(fig) {
+    function forceColorbarEverywhere(fig, savedCB) {
       fig.data = Array.isArray(fig.data) ? fig.data : [];
       fig.layout = fig.layout ? { ...fig.layout } : {};
       fig.frames = Array.isArray(fig.frames) ? fig.frames : [];
@@ -146,11 +208,11 @@
       delete fig.layout.coloraxis2;
       delete fig.layout.coloraxis3;
 
-      ensureSharedColoraxis(fig.layout);
+      ensureSharedColoraxis(fig.layout, savedCB);
 
       // Patch main traces
       for (const tr of fig.data) {
-        if (traceLooksColorMapped(tr)) forceTraceToUseSharedColoraxis(tr);
+        if (traceLooksColorMapped(tr)) forceTraceToUseSharedColoraxis(tr, savedCB);
       }
 
       // Patch frames too (sliders/animations can override trace properties)
@@ -161,12 +223,12 @@
           fr.layout = { ...fr.layout };
           delete fr.layout.coloraxis2;
           delete fr.layout.coloraxis3;
-          ensureSharedColoraxis(fr.layout);
+          ensureSharedColoraxis(fr.layout, savedCB);
         }
 
         if (Array.isArray(fr.data)) {
           for (const tr of fr.data) {
-            if (traceLooksColorMapped(tr)) forceTraceToUseSharedColoraxis(tr);
+            if (traceLooksColorMapped(tr)) forceTraceToUseSharedColoraxis(tr, savedCB);
           }
         }
       }
@@ -174,6 +236,7 @@
       console.log("Trace types:", fig.data.map(t => t?.type));
       console.log("Uses shared coloraxis:", fig.data.map(t => t?.coloraxis || t?.marker?.coloraxis));
       console.log("layout.coloraxis.colorscale:", fig.layout?.coloraxis?.colorscale);
+      console.log("layout.coloraxis.colorbar.title:", fig.layout?.coloraxis?.colorbar?.title);
     }
 
     async function main(){
@@ -189,15 +252,20 @@
       } else {
         const files = await listJsonFiles();
         if (!files.length) throw new Error(`No .json files found in ${FIG_DIR}`);
-        fileName = files[0];
-        fileUrl = new URL(files[0], FIG_DIR);
+
+        const idx = Math.floor(Math.random() * files.length);
+        fileName = files[idx];
+        fileUrl = new URL(fileName, FIG_DIR);
       }
 
       const r = await fetch(fileUrl, { cache: "no-store" });
       if (!r.ok) throw new Error(`Failed to load ${fileUrl} (HTTP ${r.status})`);
       const fig = await r.json();
 
-      forceColorbarEverywhere(fig);
+      // <<< THIS is the added part: preserve colorbar text from the JSON >>>
+      const savedCB = extractColorbarText(fig);
+
+      forceColorbarEverywhere(fig, savedCB);
 
       const config = { responsive: true, displaylogo: false, ...(fig.config || {}) };
 

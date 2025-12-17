@@ -186,6 +186,17 @@
       "2024010713_2774.json",
     ];
 
+    // ---- Our enforced diverging scale (matches your spec) ----
+    const RDBU = [
+      [0.00, "rgb(178,24,43)"],    // red
+      [0.18, "rgb(214,96,77)"],    // red-orange
+      [0.32, "rgb(244,165,130)"],  // salmon
+      [0.50, "rgb(247,247,247)"],  // white
+      [0.68, "rgb(146,197,222)"],  // light blue
+      [0.82, "rgb(67,147,195)"],   // medium blue
+      [1.00, "rgb(33,102,172)"],   // blue
+    ];
+
     let allFiles = [];
     let selectedFile = null;
 
@@ -306,6 +317,17 @@
       updateViewerVisibility();
     }
 
+    function normalizeTitleObject(title) {
+      if (title == null) return undefined;
+      if (typeof title === "string") return { text: title };
+      if (typeof title === "object") {
+        // keep as-is, but ensure `text` exists if it's nested
+        if ("text" in title) return title;
+        return { ...title };
+      }
+      return undefined;
+    }
+
     // ✅ IMPORTANT: keep frames for slider/animation interactivity
     async function renderPlotFromJson(filename) {
       if (!window.Plotly) throw new Error("Plotly failed to load (CDN blocked/offline).");
@@ -319,18 +341,86 @@
 
       const fig = await r.json();
 
-      const figure = {
-        data: fig.data || [],
-        layout: fig.layout || {},
-        frames: fig.frames || []
-      };
+      // ---- Save any existing heatmap colorbar text BEFORE we override anything ----
+      const srcHeatmap = (Array.isArray(fig.data) ? fig.data : []).find(t => t && t.type === "heatmap");
+      const srcCB = srcHeatmap?.colorbar || fig?.layout?.coloraxis?.colorbar || {};
+      const savedTitle = normalizeTitleObject(srcCB?.title);
+      const savedTickvals = srcCB?.tickvals;
+      const savedTicktext = srcCB?.ticktext;
+      const savedTickmode = srcCB?.tickmode;
+
+      // ---- Build layout/data and force consistent palette without losing text ----
+      const layout = { ...(fig.layout || {}) };
+      layout.autosize = true;
+
+      // Make room on the right so the colorbar never clips
+      layout.margin = { ...(layout.margin || {}), l: 60, r: 260, t: 40, b: 120 };
+
+      // If a shared coloraxis exists, it may override colorscale -> remove it
+      delete layout.coloraxis;
+      delete layout.coloraxis2;
+      delete layout.coloraxis3;
+
+      const data = Array.isArray(fig.data) ? fig.data : [];
+      const frames = Array.isArray(fig.frames) ? fig.frames : [];
+
+      // Patch heatmap trace(s) in main data
+      for (const tr of data) {
+        if (!tr || tr.type !== "heatmap") continue;
+
+        delete tr.coloraxis; // ensure trace uses its own colorscale
+        tr.colorscale = RDBU;
+        tr.reversescale = true;
+        tr.showscale = true;
+
+        tr.colorbar = {
+          ...(tr.colorbar || {}),
+          ...(savedTitle ? { title: savedTitle } : {}),
+          ...(savedTickmode ? { tickmode: savedTickmode } : {}),
+          ...(savedTickvals !== undefined ? { tickvals: savedTickvals } : {}),
+          ...(savedTicktext !== undefined ? { ticktext: savedTicktext } : {}),
+          x: 1.0,
+          xanchor: "left",
+          thickness: 18,
+          len: 0.9
+        };
+      }
+
+      // Patch heatmap trace(s) inside frames too (if any)
+      for (const fr of frames) {
+        if (!fr || !Array.isArray(fr.data)) continue;
+        for (const tr of fr.data) {
+          if (!tr || tr.type !== "heatmap") continue;
+          delete tr.coloraxis;
+          tr.colorscale = RDBU;
+          tr.reversescale = false;
+          tr.showscale = true;
+          tr.colorbar = {
+            ...(tr.colorbar || {}),
+            ...(savedTitle ? { title: savedTitle } : {}),
+            ...(savedTickmode ? { tickmode: savedTickmode } : {}),
+            ...(savedTickvals !== undefined ? { tickvals: savedTickvals } : {}),
+            ...(savedTicktext !== undefined ? { ticktext: savedTicktext } : {}),
+            x: 1.0,
+            xanchor: "left",
+            thickness: 18,
+            len: 0.9
+          };
+        }
+      }
 
       const config = Object.assign(
         { responsive: true, displaylogo: false },
         (fig.config || {})
       );
 
-      await Plotly.react(els.plot, figure, config);
+      // Render (use the correct Plotly.react signature)
+      await Plotly.react(els.plot, data, layout, config);
+
+      // Re-add frames so slider/animation stays interactive
+      if (frames.length) {
+        try { await Plotly.addFrames(els.plot, frames); } catch (e) { console.warn("addFrames failed:", e); }
+      }
     }
 
     async function selectFile(filename, {openInNewTab=false} = {}) {
