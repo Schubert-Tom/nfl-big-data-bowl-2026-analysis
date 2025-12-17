@@ -54,10 +54,9 @@
     .viewerHeader .name{font-weight:650;}
     .viewerHeader .hint{opacity:.75;font-size:.95rem;}
 
-    /* Height is set dynamically in JS */
     #plot{
       width:100%;
-      min-height:420px;
+      height:1000px;
       border-radius:10px;
       background:#00000008;
     }
@@ -78,12 +77,11 @@
     }
 
     /* Plot-only mode (opened in a new tab via ?plot=play_001.json) */
-    .plot-only body { margin:0 !important; }
     .plot-only header,
     .plot-only #gridWrap { display:none !important; }
     .plot-only .layout { grid-template-columns:1fr; }
     .plot-only #viewer { display:block !important; border:0; padding:0; }
-    .plot-only #plot { width:100vw !important; height:100vh !important; border-radius:0; min-height:0; }
+    .plot-only #plot { height:100vh !important; border-radius:0; }
   </style>
 </head>
 
@@ -99,6 +97,20 @@
         Preview
       </label>
 
+      <label title="Preview height (desktop)">
+        Height
+        <select id="height">
+          <option value="1000" selected>1000px</option>
+          <option value="1200">1200px</option>
+          <option value="900">900px</option>
+          <option value="800">800px</option>
+          <option value="720">720px</option>
+          <option value="600">600px</option>
+          <option value="480">480px</option>
+          <option value="360">360px</option>
+        </select>
+      </label>
+
       <button id="reload" type="button">Reload list</button>
       <span id="status" class="meta"></span>
     </div>
@@ -106,33 +118,32 @@
     <div id="error" class="err hidden"></div>
 
     <div class="desc">
-      <h2>🏈 Kinematics-Based Coverage Gallery</h2>
+        <h2>🏈 Kinematics-Based Coverage Gallery</h2>
 
-      <h3>What this is</h3>
-      <p>
-        This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.
-      </p>
+        <h3>What this is</h3>
+        <p>
+            This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.
+        </p>
 
-      <p>
-        For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:
-      </p>
-      <ul>
-        <li>current speed</li>
-        <li>heading / direction</li>
-      </ul>
+        <p>
+            For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:
+        </p>
+        <ul>
+            <li>current speed</li>
+            <li>heading / direction</li>
+        </ul>
 
-      <p>
-        Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.
-      </p>
-      <hr />
-      <h3>How to read the colors (risk map)</h3>
-      <ul>
-        <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
-        <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
-        <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
-      </ul>
-      <hr />
-    </div>
+        <p>
+            Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.
+        </p>
+        <hr />
+        <h3>How to read the colors (risk map)</h3>
+        <ul>
+            <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
+            <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
+            <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
+        </ul>
+        <hr />
   </header>
 
   <main class="layout">
@@ -153,6 +164,7 @@
     const els = {
       q: document.getElementById("q"),
       preview: document.getElementById("preview"),
+      height: document.getElementById("height"),
       reload: document.getElementById("reload"),
       status: document.getElementById("status"),
       error: document.getElementById("error"),
@@ -171,8 +183,8 @@
 
     // ✅ Hardcoded fallback list (used if manifest + GitHub API both fail)
     const FALLBACK_FILES = [
-      "2024010713_3403.json",
-      "2024010713_3467.json",
+      "2023090700_1001.json",
+      "2023090700_1300.json",
       "2023090700_1618.json",
       "2023090700_1837.json",
     ];
@@ -264,30 +276,6 @@
       return sortFiles(files);
     }
 
-    function fitPlotToViewport() {
-      // Plot-only mode: pure full-screen (CSS already sets 100vh, but keep it robust)
-      if (plotParam) {
-        els.plot.style.height = `${window.innerHeight}px`;
-        if (window.Plotly) window.Plotly.Plots.resize(els.plot);
-        return;
-      }
-
-      // Desktop preview mode: fill remaining viewport under the plot top
-      const showPreview = els.preview.checked && !isMobile() && !plotParam;
-      if (!showPreview || !selectedFile) return;
-
-      const rect = els.plot.getBoundingClientRect();
-      const bottomPadding = 28;  // a bit more breathing room so slider never clips
-      const uiReserve = 110;     // reserve for slider/buttons/labels
-      const minH = 420;
-
-      const available = window.innerHeight - rect.top - bottomPadding - uiReserve;
-      const h = Math.max(minH, Math.floor(available));
-
-      els.plot.style.height = `${h}px`;
-      if (window.Plotly) window.Plotly.Plots.resize(els.plot);
-    }
-
     function updateViewerVisibility() {
       const showPreview = els.preview.checked && !isMobile() && !plotParam;
 
@@ -296,7 +284,10 @@
         return;
       }
       els.viewer.classList.remove("hidden");
-      fitPlotToViewport();
+
+      const h = Number(els.height.value) || 1000;
+      els.plot.style.height = `${h}px`;
+      if (window.Plotly) window.Plotly.Plots.resize(els.plot);
     }
 
     function renderList() {
@@ -331,85 +322,18 @@
 
       const fig = await r.json();
 
-      // -------------------- COLOR STUFF (force blue-white-red) --------------------
-      const RDBU = [
-        [0.0, "rgb(33,102,172)"],   // blue
-        [0.5, "rgb(247,247,247)"],  // white
-        [1.0, "rgb(178,24,43)"],    // red
-      ];
-
-      const layout = { ...(fig.layout || {}) };
-      layout.autosize = true;
-
-      // IMPORTANT: make OUR margins win (your exported r=120 often clips colorbar)
-      layout.margin = { ...(layout.margin || {}), l: 60, r: 260, t: 40, b: 120 };
-
-      // If a shared coloraxis exists with a different palette, kill it (it causes green/pink)
-      delete layout.coloraxis;
-      delete layout.coloraxis2;
-      delete layout.coloraxis3;
-
-      const data = Array.isArray(fig.data) ? fig.data : [];
-
-      // Force heatmap to use its OWN colorscale (not a shared coloraxis)
-      for (const tr of data) {
-        if (!tr || tr.type !== "heatmap") continue;
-
-        delete tr.coloraxis;          // key: disables layout.coloraxis overriding trace scale
-        tr.colorscale = RDBU;
-        tr.reversescale = false;
-        tr.showscale = true;
-
-        tr.colorbar = {
-          ...(tr.colorbar || {}),
-          x: 1.0,
-          xanchor: "left",
-          thickness: 18,
-          len: 0.9
-        };
-      }
-
-      const frames = Array.isArray(fig.frames) ? fig.frames : [];
-
-      // (Optional) also patch heatmap traces inside frames, if any
-      for (const fr of frames) {
-        if (!fr || !Array.isArray(fr.data)) continue;
-        for (const tr of fr.data) {
-          if (!tr || tr.type !== "heatmap") continue;
-          delete tr.coloraxis;
-          tr.colorscale = RDBU;
-          tr.reversescale = false;
-          tr.showscale = true;
-          tr.colorbar = {
-            ...(tr.colorbar || {}),
-            x: 1.0,
-            xanchor: "left",
-            thickness: 18,
-            len: 0.9
-          };
-        }
-      }
-      // --------------------------------------------------------------------------
+      const figure = {
+        data: fig.data || [],
+        layout: fig.layout || {},
+        frames: fig.frames || []
+      };
 
       const config = Object.assign(
         { responsive: true, displaylogo: false },
         (fig.config || {})
       );
 
-      // Render
-      await Plotly.react(els.plot, data, layout, config);
-
-      // Frames must be re-added when using Plotly.react(data, layout)
-      if (frames.length) {
-        try {
-          await Plotly.addFrames(els.plot, frames);
-        } catch {
-          // ignore if frames are incompatible; plot still renders
-        }
-      }
-
-      // Fit to viewport after Plotly computes layout
-      fitPlotToViewport();
+      await Plotly.react(els.plot, figure, config);
     }
 
     async function selectFile(filename, {openInNewTab=false} = {}) {
@@ -515,6 +439,7 @@
         try { await renderPlotFromJson(selectedFile); } catch (e) { showError(e?.message || String(e)); }
       }
     });
+    els.height.addEventListener("change", updateViewerVisibility);
     els.reload.addEventListener("click", loadList);
 
     // Click-to-select (event delegation)
@@ -578,7 +503,9 @@
         }
         updateViewerVisibility();
       }
-      fitPlotToViewport();
+      if (window.Plotly && !els.viewer.classList.contains("hidden")) {
+        window.Plotly.Plots.resize(els.plot);
+      }
     });
 
     loadList();
