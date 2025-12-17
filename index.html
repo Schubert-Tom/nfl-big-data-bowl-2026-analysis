@@ -264,10 +264,6 @@
       return sortFiles(files);
     }
 
-    function reminderPlotNeedsHeight() {
-      // No-op placeholder; kept to make intent obvious.
-    }
-
     function fitPlotToViewport() {
       // Plot-only mode: pure full-screen (CSS already sets 100vh, but keep it robust)
       if (plotParam) {
@@ -281,10 +277,11 @@
       if (!showPreview || !selectedFile) return;
 
       const rect = els.plot.getBoundingClientRect();
-      const bottomPadding = 16; // breathing room
+      const bottomPadding = 28;  // a bit more breathing room so slider never clips
+      const uiReserve = 110;     // reserve for slider/buttons/labels
       const minH = 420;
 
-      const available = window.innerHeight - rect.top - bottomPadding;
+      const available = window.innerHeight - rect.top - bottomPadding - uiReserve;
       const h = Math.max(minH, Math.floor(available));
 
       els.plot.style.height = `${h}px`;
@@ -299,8 +296,6 @@
         return;
       }
       els.viewer.classList.remove("hidden");
-
-      // Set dynamic height + resize plot
       fitPlotToViewport();
     }
 
@@ -336,24 +331,65 @@
 
       const fig = await r.json();
 
-      // ---- Ensure the plot has room for colorbar on the right (heatmap "legend") ----
-      const layout = Object.assign({}, fig.layout || {});
-      layout.autosize = true;
-      layout.margin = Object.assign({}, layout.margin || {}, { l: 60, r: 140, t: 40, b: 60 });
+      // -------------------- COLOR STUFF (force blue-white-red) --------------------
+      const RDBU = [
+        [0.0, "rgb(33,102,172)"],   // blue
+        [0.5, "rgb(247,247,247)"],  // white
+        [1.0, "rgb(178,24,43)"],    // red
+      ];
 
-      // If your JSON uses `coloraxis`, keep the colorbar from being clipped:
-      if (layout.coloraxis && !layout.coloraxis.colorbar) {
-        layout.coloraxis.colorbar = { x: 1.02, thickness: 18, len: 0.9 };
-      }
+      const layout = { ...(fig.layout || {}) };
+      layout.autosize = true;
+
+      // IMPORTANT: make OUR margins win (your exported r=120 often clips colorbar)
+      layout.margin = { ...(layout.margin || {}), l: 60, r: 260, t: 40, b: 120 };
+
+      // If a shared coloraxis exists with a different palette, kill it (it causes green/pink)
+      delete layout.coloraxis;
+      delete layout.coloraxis2;
+      delete layout.coloraxis3;
 
       const data = Array.isArray(fig.data) ? fig.data : [];
-      // If you have heatmaps, make sure their colorbar is enabled
+
+      // Force heatmap to use its OWN colorscale (not a shared coloraxis)
       for (const tr of data) {
-        if (tr && tr.type === "heatmap" && tr.showscale === undefined) tr.showscale = true;
-        if (tr && tr.type === "heatmap" && tr.colorbar === undefined) tr.colorbar = { x: 1.02, thickness: 18, len: 0.9 };
+        if (!tr || tr.type !== "heatmap") continue;
+
+        delete tr.coloraxis;          // key: disables layout.coloraxis overriding trace scale
+        tr.colorscale = RDBU;
+        tr.reversescale = false;
+        tr.showscale = true;
+
+        tr.colorbar = {
+          ...(tr.colorbar || {}),
+          x: 1.0,
+          xanchor: "left",
+          thickness: 18,
+          len: 0.9
+        };
       }
 
       const frames = Array.isArray(fig.frames) ? fig.frames : [];
+
+      // (Optional) also patch heatmap traces inside frames, if any
+      for (const fr of frames) {
+        if (!fr || !Array.isArray(fr.data)) continue;
+        for (const tr of fr.data) {
+          if (!tr || tr.type !== "heatmap") continue;
+          delete tr.coloraxis;
+          tr.colorscale = RDBU;
+          tr.reversescale = false;
+          tr.showscale = true;
+          tr.colorbar = {
+            ...(tr.colorbar || {}),
+            x: 1.0,
+            xanchor: "left",
+            thickness: 18,
+            len: 0.9
+          };
+        }
+      }
+      // --------------------------------------------------------------------------
 
       const config = Object.assign(
         { responsive: true, displaylogo: false },

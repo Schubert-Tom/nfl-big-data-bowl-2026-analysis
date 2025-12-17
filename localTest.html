@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plotly JSON Viewer</title>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%88%3C/text%3E%3C/svg%3E">
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+  <style>
+    html,body{height:100%;margin:0}
+    body{background:#111;color:#eee;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
+    #plot{width:100vw;height:100vh}
+    #err{position:fixed;inset:0;display:none;overflow:auto;padding:16px;white-space:pre-wrap;color:#ffb4b4;background:#111}
+  </style>
+</head>
+<body>
+  <div id="plot"></div>
+  <pre id="err"></pre>
+
+  <script>
+    const errEl = document.getElementById("err");
+    const FIG_DIR = new URL("figures/", window.location.href);
+
+    function showErr(e){
+      errEl.style.display = "block";
+      errEl.textContent = String(e?.stack || e);
+    }
+
+    async function listJsonFiles() {
+      const r = await fetch(FIG_DIR, { cache: "no-store" });
+      if (!r.ok) throw new Error(`Can't open ${FIG_DIR} (HTTP ${r.status}). Run: python3 -m http.server 8000`);
+      const html = await r.text();
+
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      return Array.from(doc.querySelectorAll("a"))
+        .map(a => a.getAttribute("href") || "")
+        .filter(h => h.toLowerCase().endsWith(".json"))
+        .filter(h => !h.includes("/") && !h.startsWith("."))
+        .sort((a,b) => a.localeCompare(b, undefined, { numeric:true, sensitivity:"base" }));
+    }
+
+    // Explicit blue-white-red (no name lookup, no template surprises)
+    const RDBU = [
+      [0.0, "rgb(33,102,172)"],   // blue
+      [0.5, "rgb(247,247,247)"],  // white
+      [1.0, "rgb(178,24,43)"],    // red
+    ];
+
+    function ensureSharedColoraxis(layout) {
+      layout.autosize = true;
+
+      // IMPORTANT: make our margins win (room for colorbar + slider)
+      layout.margin = { ...(layout.margin || {}), l: 40, r: 260, t: 20, b: 150 };
+
+      // Shared coloraxis (we force it to RdBu so it can't turn green/pink)
+      layout.coloraxis = layout.coloraxis || {};
+      layout.coloraxis.showscale = true;
+      layout.coloraxis.colorscale = RDBU;
+      layout.coloraxis.cmid = 0; // diverging midpoint
+      layout.coloraxis.colorbar = {
+        x: 1.0,
+        xanchor: "left",
+        thickness: 18,
+        len: 0.9,
+        ...(layout.coloraxis.colorbar || {})
+      };
+
+      // keeps UI stable across slider/frame updates
+      if (layout.uirevision === undefined) layout.uirevision = "keep";
+    }
+
+    function traceLooksColorMapped(tr) {
+      if (!tr) return false;
+
+      const direct = new Set([
+        "heatmap","contour","histogram2d","histogram2dcontour",
+        "densitymapbox","choropleth","choroplethmapbox",
+        "image","surface"
+      ]);
+      if (direct.has(tr.type)) return true;
+
+      const scatterish = new Set(["scatter","scattergl","scattergeo","scattermapbox","scatterternary","scatterpolar"]);
+      if (scatterish.has(tr.type) && tr.marker) {
+        const c = tr.marker.color;
+        const hasColorArray = Array.isArray(c);
+        const hasScale = tr.marker.colorscale || tr.marker.coloraxis;
+        const isNumeric = typeof c === "number";
+        return hasColorArray || hasScale || isNumeric;
+      }
+
+      return false;
+    }
+
+    function forceTraceToUseSharedColoraxis(tr) {
+      if (!tr) return;
+
+      // Heatmap/contour/etc: link to shared coloraxis AND also set per-trace colorscale (belt+suspenders)
+      if (tr.type && ["heatmap","contour","histogram2d","histogram2dcontour","image","surface",
+                      "densitymapbox","choropleth","choroplethmapbox"].includes(tr.type)) {
+        tr.coloraxis = "coloraxis";
+        if (tr.showscale === false) tr.showscale = true;
+        if (tr.showscale === undefined) tr.showscale = true;
+
+        // If it renders per-trace (no shared axis), still force RdBu:
+        tr.colorscale = RDBU;
+        tr.reversescale = false;
+
+        // keep bar inside canvas
+        tr.colorbar = {
+          x: 1.0,
+          xanchor: "left",
+          thickness: 18,
+          len: 0.9,
+          ...(tr.colorbar || {})
+        };
+        return;
+      }
+
+      // Scatter-like: use marker.coloraxis + marker.showscale and force RdBu
+      if (tr.marker) {
+        tr.marker.coloraxis = "coloraxis";
+        if (tr.marker.showscale === false) tr.marker.showscale = true;
+        if (tr.marker.showscale === undefined) tr.marker.showscale = true;
+
+        tr.marker.colorscale = RDBU;
+        tr.marker.reversescale = false;
+
+        tr.marker.colorbar = {
+          x: 1.0,
+          xanchor: "left",
+          thickness: 18,
+          len: 0.9,
+          ...(tr.marker.colorbar || {})
+        };
+      }
+    }
+
+    function forceColorbarEverywhere(fig) {
+      fig.data = Array.isArray(fig.data) ? fig.data : [];
+      fig.layout = fig.layout ? { ...fig.layout } : {};
+      fig.frames = Array.isArray(fig.frames) ? fig.frames : [];
+
+      // Remove other coloraxes that might carry a different colorscale
+      delete fig.layout.coloraxis2;
+      delete fig.layout.coloraxis3;
+
+      ensureSharedColoraxis(fig.layout);
+
+      // Patch main traces
+      for (const tr of fig.data) {
+        if (traceLooksColorMapped(tr)) forceTraceToUseSharedColoraxis(tr);
+      }
+
+      // Patch frames too (sliders/animations can override trace properties)
+      for (const fr of fig.frames) {
+        if (!fr) continue;
+
+        if (fr.layout) {
+          fr.layout = { ...fr.layout };
+          delete fr.layout.coloraxis2;
+          delete fr.layout.coloraxis3;
+          ensureSharedColoraxis(fr.layout);
+        }
+
+        if (Array.isArray(fr.data)) {
+          for (const tr of fr.data) {
+            if (traceLooksColorMapped(tr)) forceTraceToUseSharedColoraxis(tr);
+          }
+        }
+      }
+
+      console.log("Trace types:", fig.data.map(t => t?.type));
+      console.log("Uses shared coloraxis:", fig.data.map(t => t?.coloraxis || t?.marker?.coloraxis));
+      console.log("layout.coloraxis.colorscale:", fig.layout?.coloraxis?.colorscale);
+    }
+
+    async function main(){
+      if (!window.Plotly) throw new Error("Plotly failed to load.");
+
+      const params = new URLSearchParams(location.search);
+      const requested = params.get("plot");
+
+      let fileName, fileUrl;
+      if (requested) {
+        fileName = requested;
+        fileUrl = new URL(requested, FIG_DIR);
+      } else {
+        const files = await listJsonFiles();
+        if (!files.length) throw new Error(`No .json files found in ${FIG_DIR}`);
+        fileName = files[0];
+        fileUrl = new URL(files[0], FIG_DIR);
+      }
+
+      const r = await fetch(fileUrl, { cache: "no-store" });
+      if (!r.ok) throw new Error(`Failed to load ${fileUrl} (HTTP ${r.status})`);
+      const fig = await r.json();
+
+      forceColorbarEverywhere(fig);
+
+      const config = { responsive: true, displaylogo: false, ...(fig.config || {}) };
+
+      await Plotly.react("plot", fig.data || [], fig.layout || {}, config);
+
+      if (Array.isArray(fig.frames) && fig.frames.length) {
+        try { await Plotly.addFrames("plot", fig.frames); } catch (e) { console.warn("addFrames failed:", e); }
+      }
+
+      window.addEventListener("resize", () => Plotly.Plots.resize("plot"));
+      document.title = `Plotly — ${fileName}`;
+    }
+
+    main().catch(showErr);
+  </script>
+</body>
+</html>
