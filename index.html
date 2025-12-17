@@ -4,112 +4,100 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Kinematic Based Coverage and Risk Analysis</title>
+
+  <!-- Plotly (loaded once). If you want fully offline, download this file and serve locally. -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
   <style>
     :root { color-scheme: dark; }
 
-    body {
-      background: #111;
-      color: #eee;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 24px;
+    body{
+      background:#111;
+      color:#eee;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      margin:24px;
     }
 
-    header { display: grid; gap: 12px; margin-bottom: 16px; }
-    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    input[type="search"] { padding: 10px 12px; min-width: 260px; border-radius: 10px; border: 1px solid #9996; background: transparent; color: inherit; }
-    button, select, label { border-radius: 10px; border: 1px solid #9996; padding: 10px 12px; background: transparent; color: inherit; }
-    label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; }
-    .meta { opacity: 0.8; font-size: 0.95rem; }
-
+    header{display:grid;gap:12px;margin-bottom:16px;}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+    input[type="search"]{
+      padding:10px 12px;min-width:260px;border-radius:10px;border:1px solid #9996;
+      background:transparent;color:inherit;
+    }
+    button,select,label{
+      border-radius:10px;border:1px solid #9996;padding:10px 12px;background:transparent;color:inherit;
+    }
+    label{display:inline-flex;gap:8px;align-items:center;padding:8px 10px;}
+    .meta{opacity:.8;font-size:.95rem;}
     .desc{
-      border: 1px solid #9996;
-      border-radius: 14px;
-      padding: 12px 14px;
-      font-size: 1.02rem;
-      line-height: 1.35;
-      opacity: 0.95;
+      border:1px solid #9996;border-radius:14px;padding:12px 14px;
+      font-size:1.02rem;line-height:1.35;opacity:.95;
     }
 
-    .layout { display: grid; gap: 14px; grid-template-columns: 420px 1fr; align-items: start; }
+    .layout{display:grid;gap:14px;grid-template-columns:420px 1fr;align-items:start;}
 
-    .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-    .card {
-      border: 1px solid #9996;
-      border-radius: 14px;
-      padding: 12px;
-      cursor: pointer;
-      user-select: none;
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}
+    .card{
+      border:1px solid #9996;border-radius:14px;padding:12px;cursor:pointer;user-select:none;
     }
-    .card:hover { filter: brightness(1.03); }
-    .card.selected { outline: 2px solid #6aa6ff66; }
+    .card:hover{filter:brightness(1.03);}
+    .card.selected{outline:2px solid #6aa6ff66;}
+    .title{font-weight:650;margin:0;}
 
-    .title { font-weight: 650; margin: 0; }
-
-    .viewer {
-      border: 1px solid #9996;
-      border-radius: 14px;
-      padding: 12px;
-      position: sticky;
-      top: 16px;
+    .viewer{
+      border:1px solid #9996;border-radius:14px;padding:12px;
+      position:sticky;top:16px;
     }
-    .viewerHeader {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 10px;
+    .viewerHeader{
+      display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;
     }
-    .viewerHeader .name { font-weight: 650; }
-    .viewerHeader .hint { opacity: 0.75; font-size: 0.95rem; }
+    .viewerHeader .name{font-weight:650;}
+    .viewerHeader .hint{opacity:.75;font-size:.95rem;}
 
-    iframe {
-      width: 100%;
-      height: 1000px;
-      border: 0;
-      border-radius: 10px;
-      background: #00000008;
-      overflow: hidden;
+    #plot{
+      width:100%;
+      height:1000px;
+      border-radius:10px;
+      background:#00000008;
     }
 
-    .err { border: 1px solid #c33; padding: 12px; border-radius: 12px; }
-    .hint { opacity: 0.85; }
-    .hidden { display: none; }
+    .err{border:1px solid #c33;padding:12px;border-radius:12px;}
+    .hint{opacity:.85;}
+    .hidden{display:none;}
 
     /* Responsive */
-    @media (max-width: 980px) {
-      .layout { grid-template-columns: 1fr; }
-      .viewer { position: static; top: auto; }
-      iframe { height: 70vh; }
-      body { margin: 14px; }
-      input[type="search"] { min-width: 180px; flex: 1; }
+    @media (max-width: 980px){
+      body{margin:14px;}
+      .layout{grid-template-columns:1fr;}
+      .viewer{position:static;top:auto;}
+      input[type="search"]{min-width:180px;flex:1;}
+    }
+    @media (max-width: 560px){
+      .grid{grid-template-columns:1fr;}
     }
 
-    /* Optional: nicer multi-column list on medium screens, but 1-col on small phones */
-    .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
-
-    /* Plot-only mode: opened via ?plot=yourfile.html */
+    /* Plot-only mode (opened in a new tab via ?plot=play_001.json) */
     .plot-only header,
-    .plot-only #gridWrap {
-      display: none !important;
-    }
-    .plot-only .layout { grid-template-columns: 1fr; }
-    .plot-only #viewer { display: block !important; position: static; border: 0; padding: 0; }
-    .plot-only iframe { height: 100vh !important; border-radius: 0; }
+    .plot-only #gridWrap { display:none !important; }
+    .plot-only .layout { grid-template-columns:1fr; }
+    .plot-only #viewer { display:block !important; border:0; padding:0; }
+    .plot-only #plot { height:100vh !important; border-radius:0; }
   </style>
 </head>
+
 <body>
   <header>
     <h1 style="margin:0;">Plotly Gallery</h1>
 
     <div class="row">
-      <input id="q" type="search" placeholder="Search figures…" />
-      <label title="Show a single preview for the selected figure">
+      <input id="q" type="search" placeholder="Search plays…" />
+
+      <label title="Show an in-page preview (desktop)">
         <input id="preview" type="checkbox" checked />
         Preview
       </label>
 
-      <label title="Preview height">
+      <label title="Preview height (desktop)">
         Height
         <select id="height">
           <option value="1000" selected>1000px</option>
@@ -131,35 +119,21 @@
 
     <div class="desc">
       <h2>🏈 Kinematics-Based Coverage Gallery</h2>
-
-      <h3>What this is</h3>
-      <p>This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.</p>
-
-      <p>For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:</p>
+      <p>
+        This gallery renders <strong>Plotly JSON</strong> figures from <code>figures/*.json</code> using a single Plotly runtime
+        (smoother than iframes).
+      </p>
       <ul>
-        <li>current speed</li>
-        <li>heading / direction</li>
-      </ul>
-
-      <p>Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.</p>
-
-      <hr />
-
-      <h3>How to read the colors (risk map)</h3>
-      <ul>
-        <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
-        <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
-        <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
+        <li><strong>Desktop:</strong> click to preview, double-click to open plot-only tab.</li>
+        <li><strong>Mobile:</strong> preview is disabled; tapping a play opens a new tab.</li>
       </ul>
 
       <hr />
 
-      <h3>Navigation / loading</h3>
-      <ul>
-        <li>The page reads <code>figures/*.html</code> via the <strong>GitHub API</strong> to build the file list.</li>
-        <li>Double-click any card to open a <strong>plot-only</strong> view in a new tab.</li>
-        <li>On mobile the layout stacks and the preview is not sticky.</li>
-      </ul>
+      <div class="hint">
+        Recommended: create <code>figures/manifest.json</code> with a JSON array of filenames, e.g.
+        <code>["play_001.json","play_002.json"]</code> to avoid GitHub API rate limits.
+      </div>
     </div>
   </header>
 
@@ -173,16 +147,11 @@
         <div class="name" id="viewerName"></div>
         <div class="hint" id="viewerHint"></div>
       </div>
-      <iframe id="viewerFrame" scrolling="no" loading="lazy"></iframe>
+      <div id="plot"></div>
     </section>
   </main>
 
   <script>
-    // Plot-only mode: open index.html?plot=<filename.html>
-    const urlParams = new URLSearchParams(location.search);
-    const plotParam = urlParams.get("plot");
-    if (plotParam) document.documentElement.classList.add("plot-only");
-
     const els = {
       q: document.getElementById("q"),
       preview: document.getElementById("preview"),
@@ -194,43 +163,32 @@
       viewer: document.getElementById("viewer"),
       viewerName: document.getElementById("viewerName"),
       viewerHint: document.getElementById("viewerHint"),
-      viewerFrame: document.getElementById("viewerFrame"),
+      plot: document.getElementById("plot"),
+    };
+
+    const CONFIG = {
+      manifestPath: "figures/manifest.json",
+      githubApiFallback: true, // set false to never call GitHub API
+      mobileMaxWidth: 980
     };
 
     let allFiles = [];
     let selectedFile = null;
 
-    function inferOwnerRepo() {
-      const host = location.hostname;               // "<owner>.github.io"
-      const owner = host.split(".")[0] || "";
-      const parts = location.pathname.split("/").filter(Boolean);
-      const repo = parts.length ? parts[0] : `${owner}.github.io`;
-      return { owner, repo };
+    const params = new URLSearchParams(location.search);
+    const plotParam = params.get("plot"); // e.g. play_001.json
+    if (plotParam) document.documentElement.classList.add("plot-only");
+
+    function isMobile() {
+      return window.matchMedia(`(max-width: ${CONFIG.mobileMaxWidth}px)`).matches;
     }
 
-    async function fetchDefaultBranch(owner, repo) {
-      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers: { "Accept": "application/vnd.github+json" }
-      });
-      if (!r.ok) throw new Error(`GitHub repo lookup failed (${r.status})`);
-      const j = await r.json();
-      return j.default_branch || "main";
-    }
-
-    async function fetchFiguresList(owner, repo, branch) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/contents/figures?ref=${encodeURIComponent(branch)}`;
-      const r = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
-      if (!r.ok) throw new Error(`GitHub contents API failed (${r.status}). Does /figures exist?`);
-      const j = await r.json();
-
-      return (Array.isArray(j) ? j : [])
-        .filter(x => x && x.type === "file" && typeof x.name === "string" && x.name.toLowerCase().endsWith(".html"))
-        .map(x => x.name)
-        .sort((a,b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+    function sortFiles(files) {
+      return files.slice().sort((a,b) => a.localeCompare(b, undefined, { numeric:true, sensitivity:"base" }));
     }
 
     function nameFromFile(filename) {
-      return filename.replace(/\.html$/i, "");
+      return filename.replace(/\.json$/i, "");
     }
 
     function escapeHtml(s) {
@@ -245,11 +203,11 @@
     function showError(msg) {
       els.error.classList.remove("hidden");
       els.error.innerHTML = `
-        <div><strong>Could not auto-list figures.</strong></div>
+        <div><strong>Error</strong></div>
         <div style="margin-top:6px;">${escapeHtml(msg)}</div>
         <div class="hint" style="margin-top:10px;">
-          Make sure your repo has a <code>figures/</code> folder, is public (or you’re not hitting API limits),
-          and GitHub Pages is serving the same branch.
+          If listing fails due to GitHub API limits, add <code>${escapeHtml(CONFIG.manifestPath)}</code>
+          containing a JSON array of your <code>.json</code> files.
         </div>
       `;
     }
@@ -259,33 +217,69 @@
       els.error.innerHTML = "";
     }
 
-    function updateViewer() {
-      const showPreview = els.preview.checked;
+    async function fetchManifestList() {
+      const r = await fetch(CONFIG.manifestPath, { cache: "no-store" });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!Array.isArray(j)) return null;
+      return sortFiles(
+        j.filter(x => typeof x === "string").filter(x => x.toLowerCase().endsWith(".json"))
+      );
+    }
+
+    function inferOwnerRepo() {
+      // Works for <owner>.github.io/<repo>/...
+      const host = location.hostname;
+      if (!host.endsWith("github.io")) return { owner: null, repo: null };
+      const owner = host.split(".")[0] || "";
+      const parts = location.pathname.split("/").filter(Boolean);
+      const repo = parts.length ? parts[0] : `${owner}.github.io`;
+      return { owner, repo };
+    }
+
+    function explainRateLimit(r) {
+      const remaining = r.headers.get("x-ratelimit-remaining");
+      const reset = r.headers.get("x-ratelimit-reset");
+      if (r.status === 403 && remaining === "0" && reset) {
+        const when = new Date(Number(reset) * 1000).toLocaleString();
+        return `GitHub API rate limit hit (403). Try again after ${when} or add figures/manifest.json.`;
+      }
+      return null;
+    }
+
+    async function fetchFiguresListFromGitHub(owner, repo) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/figures`;
+      const r = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
+      if (!r.ok) throw new Error(explainRateLimit(r) || `GitHub contents API failed (${r.status}).`);
+
+      const j = await r.json();
+      const files = (Array.isArray(j) ? j : [])
+        .filter(x => x && x.type === "file" && typeof x.name === "string" && x.name.toLowerCase().endsWith(".json"))
+        .map(x => x.name);
+
+      return sortFiles(files);
+    }
+
+    function updateViewerVisibility() {
+      const showPreview = els.preview.checked && !isMobile() && !plotParam;
 
       if (!showPreview || !selectedFile) {
         els.viewer.classList.add("hidden");
-        els.viewerFrame.removeAttribute("src");
         return;
       }
+      els.viewer.classList.remove("hidden");
 
       const h = Number(els.height.value) || 1000;
-      const href = `figures/${encodeURIComponent(selectedFile)}`;
-
-      els.viewer.classList.remove("hidden");
-      els.viewerName.textContent = nameFromFile(selectedFile);
-      els.viewerHint.textContent = href;
-      els.viewerFrame.style.height = `${h}px`;
-
-      if (els.viewerFrame.getAttribute("src") !== href) {
-        els.viewerFrame.setAttribute("src", href);
-      }
+      els.plot.style.height = `${h}px`;
+      // Let Plotly resize into the new height
+      if (window.Plotly) window.Plotly.Plots.resize(els.plot);
     }
 
     function renderList() {
       const query = els.q.value.trim().toLowerCase();
       const files = allFiles.filter(name => name.toLowerCase().includes(query));
 
-      els.status.textContent = `${files.length} / ${allFiles.length} figures`;
+      els.status.textContent = `${files.length} / ${allFiles.length} plays`;
 
       els.grid.innerHTML = files.map(name => {
         const title = nameFromFile(name);
@@ -297,39 +291,97 @@
         `;
       }).join("");
 
-      updateViewer();
+      updateViewerVisibility();
     }
 
-    function selectFile(name) {
-      selectedFile = name;
+    async function renderPlotFromJson(filename) {
+      if (!window.Plotly) throw new Error("Plotly failed to load (CDN blocked/offline).");
+
+      const href = `figures/${encodeURIComponent(filename)}`;
+      els.viewerName.textContent = nameFromFile(filename);
+      els.viewerHint.textContent = href;
+
+      const r = await fetch(href, { cache: "no-store" });
+      if (!r.ok) throw new Error(`Failed to load ${href} (${r.status})`);
+
+      const fig = await r.json();
+
+      // Support a few common JSON shapes:
+      // 1) {data, layout, config}
+      // 2) full Plotly schema exports that still have data/layout
+      const data = fig.data || [];
+      const layout = fig.layout || {};
+      const config = Object.assign({ responsive: true, displaylogo: false }, (fig.config || {}));
+
+      await Plotly.react(els.plot, data, layout, config);
+    }
+
+    async function selectFile(filename, {openInNewTab=false} = {}) {
+      selectedFile = filename;
+
+      if (openInNewTab) {
+        window.open(`./?plot=${encodeURIComponent(filename)}`, "_blank", "noopener");
+        return;
+      }
+
       renderList();
-      updateViewer();
+      updateViewerVisibility();
+
+      const shouldPreview = els.preview.checked && !isMobile();
+
+      if (plotParam || shouldPreview) {
+        els.viewer.classList.remove("hidden");
+        await renderPlotFromJson(filename);
+        updateViewerVisibility();
+      }
     }
 
-    async function load() {
+    async function loadList() {
       hideError();
       els.status.textContent = "Loading…";
 
+      // Mobile behavior: disable preview
+      if (isMobile() && !plotParam) {
+        els.preview.checked = false;
+        els.preview.disabled = true;
+      } else {
+        els.preview.disabled = false;
+      }
+
       try {
-        const { owner, repo } = inferOwnerRepo();
-        if (!owner || !repo) throw new Error("Could not infer owner/repo from URL.");
+        const manifest = await fetchManifestList();
+        if (manifest && manifest.length) {
+          allFiles = manifest;
+        } else if (CONFIG.githubApiFallback) {
+          const { owner, repo } = inferOwnerRepo();
+          if (!owner || !repo) {
+            throw new Error("No manifest.json found and cannot infer GitHub owner/repo (custom domain?). Add figures/manifest.json.");
+          }
+          allFiles = await fetchFiguresListFromGitHub(owner, repo);
+        } else {
+          throw new Error("No manifest.json found. Create figures/manifest.json with your .json filenames.");
+        }
 
-        const branch = await fetchDefaultBranch(owner, repo);
-        allFiles = await fetchFiguresList(owner, repo, branch);
-
-        // If plot-only mode is requested, select that plot (if it exists)
+        // Choose initial selection
         if (plotParam && allFiles.includes(plotParam)) {
           selectedFile = plotParam;
-          els.preview.checked = true;
-        } else if (!selectedFile || !allFiles.includes(selectedFile)) {
+        } else {
           selectedFile = allFiles[0] || null;
         }
 
         renderList();
 
         if (!allFiles.length) {
-          showError("No .html files found in /figures.");
-          els.status.textContent = "0 figures";
+          showError("No .json files found in /figures (or manifest is empty).");
+          els.status.textContent = "0 plays";
+          return;
+        }
+
+        // Plot-only mode: render immediately
+        if (plotParam && selectedFile) {
+          els.preview.checked = true; // irrelevant in plot-only mode, but harmless
+          els.viewer.classList.remove("hidden");
+          await renderPlotFromJson(selectedFile);
         }
       } catch (e) {
         allFiles = [];
@@ -343,19 +395,36 @@
 
     // UI hooks
     els.q.addEventListener("input", renderList);
-    els.preview.addEventListener("change", updateViewer);
-    els.height.addEventListener("change", updateViewer);
-    els.reload.addEventListener("click", load);
+    els.preview.addEventListener("change", async () => {
+      updateViewerVisibility();
+      if (els.preview.checked && selectedFile && !isMobile()) {
+        try { await renderPlotFromJson(selectedFile); } catch (e) { showError(e?.message || String(e)); }
+      }
+    });
+    els.height.addEventListener("change", updateViewerVisibility);
+    els.reload.addEventListener("click", loadList);
 
     // Click-to-select (event delegation)
-    els.grid.addEventListener("click", (ev) => {
+    els.grid.addEventListener("click", async (ev) => {
       const card = ev.target.closest(".card");
       if (!card) return;
       const file = card.getAttribute("data-file");
-      if (file) selectFile(file);
+      if (!file) return;
+
+      // Mobile: open new tab immediately, no preview
+      if (isMobile()) {
+        await selectFile(file, { openInNewTab: true });
+        return;
+      }
+
+      try {
+        await selectFile(file, { openInNewTab: false });
+      } catch (e) {
+        showError(e?.message || String(e));
+      }
     });
 
-    // Double-click: open plot-only view in a new tab
+    // Double-click (desktop): open plot-only view in new tab
     els.grid.addEventListener("dblclick", (ev) => {
       const card = ev.target.closest(".card");
       if (!card) return;
@@ -365,16 +434,43 @@
     });
 
     // Keyboard accessibility
-    els.grid.addEventListener("keydown", (ev) => {
+    els.grid.addEventListener("keydown", async (ev) => {
       if (ev.key !== "Enter" && ev.key !== " ") return;
       const card = ev.target.closest(".card");
       if (!card) return;
       ev.preventDefault();
       const file = card.getAttribute("data-file");
-      if (file) selectFile(file);
+      if (!file) return;
+
+      if (isMobile()) {
+        await selectFile(file, { openInNewTab: true });
+        return;
+      }
+
+      try {
+        await selectFile(file, { openInNewTab: false });
+      } catch (e) {
+        showError(e?.message || String(e));
+      }
     });
 
-    load();
+    // Handle resize: mobile/desktop toggle + plot resize
+    window.addEventListener("resize", () => {
+      if (!plotParam) {
+        if (isMobile()) {
+          els.preview.checked = false;
+          els.preview.disabled = true;
+        } else {
+          els.preview.disabled = false;
+        }
+        updateViewerVisibility();
+      }
+      if (window.Plotly && !els.viewer.classList.contains("hidden")) {
+        window.Plotly.Plots.resize(els.plot);
+      }
+    });
+
+    loadList();
   </script>
 </body>
 </html>
