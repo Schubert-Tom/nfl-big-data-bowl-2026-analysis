@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Kinematic Based Coverage and Risk Analysis</title>
+  <title>NFL Big Data Bowl 2026 - Analytics</title>
 
   <!-- Plotly (loaded once). If you want fully offline, download this file and serve locally. -->
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -183,9 +183,110 @@
 
     // ✅ Hardcoded fallback list (used if manifest + GitHub API both fail)
     const FALLBACK_FILES = [
-      "2023100801_3358.json",
-      "2023100801_3360.json",
-      "2023100802_393.json",
+      "2023113000_2267.json",
+      "2023120300_2086.json",
+      "2023113000_4885.json",
+      "2023113000_2455.json",
+      "2023113000_757.json",
+      "2023120300_2959.json",
+      "2023121008_2278.json",
+      "2023113000_3822.json",
+      "2023121008_2655.json",
+      "2023113000_3616.json",
+      "2023120300_1247.json",
+      "2023113000_892.json",
+      "2023120300_927.json",
+      "2023113000_607.json",
+      "2023113000_4021.json",
+      "2023120300_1410.json",
+      "2023113000_1507.json",
+      "2023120300_1896.json",
+      "2023120300_2535.json",
+      "2023113000_3236.json",
+      "2023113000_1368.json",
+      "2023120300_198.json",
+      "2023121008_2436.json",
+      "2023113000_1044.json",
+      "2023113000_4940.json",
+      "2023120300_794.json",
+      "2023113000_4385.json",
+      "2023120300_2111.json",
+      "2023113000_823.json",
+      "2023113000_1832.json",
+      "2023113000_2222.json",
+      "2023113000_4408.json",
+      "2023113000_1391.json",
+      "2023120300_2859.json",
+      "2023120300_2560.json",
+      "2023113000_4812.json",
+      "2023113000_1530.json",
+      "2023120300_1270.json",
+      "2023113000_693.json",
+      "2023113000_3669.json",
+      "2023113000_4655.json",
+      "2023120300_728.json",
+      "2023120300_751.json",
+      "2023120300_1926.json",
+      "2023121008_2503.json",
+      "2023113000_1995.json",
+      "2023120300_1681.json",
+      "2023113000_4585.json",
+      "2023113000_1108.json",
+      "2023120300_2632.json",
+      "2023113000_2850.json",
+      "2023113000_2522.json",
+      "2023120300_55.json",
+      "2023113000_4963.json",
+      "2023113000_1970.json",
+      "2023120300_977.json",
+      "2023120300_2134.json",
+      "2023113000_2873.json",
+      "2023113000_4523.json",
+      "2023120300_2302.json",
+      "2023113000_3974.json",
+      "2023120300_2655.json",
+      "2023120300_2728.json",
+      "2023120300_369.json",
+      "2023120300_2212.json",
+      "2023113000_1455.json",
+      "2023113000_3117.json",
+      "2023113000_1296.json",
+      "2023120300_1558.json",
+      "2023113000_4433.json",
+      "2023113000_4326.json",
+      "2023121008_2528.json",
+      "2023120300_2705.json",
+      "2023113000_2343.json",
+      "2023113000_1760.json",
+      "2023120300_1028.json",
+      "2023113000_3644.json",
+      "2023113000_2765.json",
+      "2023120300_1658.json",
+      "2023113000_1594.json",
+      "2023113000_286.json",
+      "2023113000_3692.json",
+      "2023121008_2107.json",
+      "2023113000_4915.json",
+      "2023121008_2404.json",
+      "2023120300_895.json",
+      "2023120300_151.json",
+      "2023113000_3431.json",
+      "2023120300_2794.json",
+      "2023120300_1178.json",
+      "2023120300_826.json",
+      "2023113000_4233.json",
+      "2023113000_1244.json",
+      "2023113000_2740.json",
+      "2023113000_4208.json",
+      "2023113000_2407.json",
+      "2023113000_501.json",
+      "2023120300_1838.json",
+      "2023120300_276.json",
+      "2023113000_3560.json",
+      "2023120300_2510.json",
+      "2023113000_3537.json",
+      "2023113000_4678.json",
+      "2023120300_1533.json",
     ];
 
     // ---- Our enforced diverging scale (matches your spec) ----
@@ -330,8 +431,13 @@
       return undefined;
     }
 
-    // ✅ IMPORTANT: keep frames for slider/animation interactivity
-    async function renderPlotFromJson(filename) {
+    function onceAfterPlot(gd, cb) {
+      if (typeof gd?.once === "function") return gd.once("plotly_afterplot", cb);
+      // fallback
+      requestAnimationFrame(cb);
+    }
+
+   async function renderPlotFromJson(filename) {
       if (!window.Plotly) throw new Error("Plotly failed to load (CDN blocked/offline).");
 
       const href = `figures/${encodeURIComponent(filename)}`;
@@ -342,6 +448,13 @@
       if (!r.ok) throw new Error(`Failed to load ${href} (${r.status})`);
 
       const fig = await r.json();
+
+      // --- "Press Play" args from the figure (uses your timing from Python) ---
+      const playBtn =
+        (fig?.layout?.updatemenus || [])
+          .flatMap(m => m?.buttons || [])
+          .find(b => b?.method === "animate" && String(b?.label || "").toLowerCase().includes("play"));
+      const playArgs = Array.isArray(playBtn?.args) ? playBtn.args : null;
 
       // ---- Save any existing heatmap colorbar text BEFORE we override anything ----
       const srcHeatmap = (Array.isArray(fig.data) ? fig.data : []).find(t => t && t.type === "heatmap");
@@ -375,7 +488,7 @@
       for (const tr of data) {
         if (!tr || tr.type !== "heatmap") continue;
 
-        delete tr.coloraxis; // ensure trace uses its own colorscale
+        delete tr.coloraxis;
         tr.colorscale = RDBU;
         tr.reversescale = false;
         tr.showscale = true;
@@ -398,10 +511,12 @@
         if (!fr || !Array.isArray(fr.data)) continue;
         for (const tr of fr.data) {
           if (!tr || tr.type !== "heatmap") continue;
+
           delete tr.coloraxis;
           tr.colorscale = RDBU;
           tr.reversescale = false;
           tr.showscale = true;
+
           tr.colorbar = {
             ...(tr.colorbar || {}),
             ...(savedTitle ? { title: savedTitle } : {}),
@@ -423,22 +538,43 @@
 
       Plotly.purge(els.plot);
 
-      // Render (use the correct Plotly.react signature)
+      // Render
       await Plotly.react(els.plot, data, layout, config);
 
       if (frames.length) {
         await Plotly.addFrames(els.plot, frames);
 
-        // hard reset to first frame
         const first = frames[0]?.name ?? 0;
-        await Plotly.animate(
-          els.plot,
-          [first],
-          { mode: "immediate", frame: { duration: 0, redraw: true }, transition: { duration: 0 } }
-        );
+
+        const autoplay = !isMobile() && !!playArgs;
+
+        // ✅ "finished drawn" = after the first-frame redraw happens
+        let started = false;
+        if (autoplay) {
+          els.plot.once("plotly_afterplot", () => {
+            if (started) return;
+            started = true;
+            Plotly.animate(els.plot, playArgs[0], playArgs[1]);
+          });
+        }
+
+
+        // This redraw will trigger plotly_afterplot once
+        await Plotly.animate(els.plot, [first], {
+          mode: "immediate",
+          frame: { duration: 0, redraw: true },
+          transition: { duration: 0 }
+        });
+
+        // (optional safety fallback if the event doesn’t fire for some reason)
+        if (autoplay) {
+          requestAnimationFrame(() => {
+            if (started) return;
+            started = true;
+            Plotly.animate(els.plot, playArgs[0], playArgs[1]);
+          });
+        }
       }
-
-
     }
 
     async function selectFile(filename, {openInNewTab=false} = {}) {
@@ -521,7 +657,7 @@
         return;
       }
 
-      // Add list source hint
+            // Add list source hint
       els.status.textContent = `${allFiles.length} plays • source: ${listSource}`;
 
       // Plot-only mode: render immediately
@@ -534,6 +670,17 @@
           showError(e?.message || String(e));
         }
       }
+      // Normal mode: auto-render first item (desktop + preview enabled)
+      else if (selectedFile && els.preview.checked && !isMobile()) {
+        els.viewer.classList.remove("hidden");
+        try {
+          await renderPlotFromJson(selectedFile);
+          updateViewerVisibility();
+        } catch (e) {
+          showError(e?.message || String(e));
+        }
+      }
+
     }
 
     // UI hooks
