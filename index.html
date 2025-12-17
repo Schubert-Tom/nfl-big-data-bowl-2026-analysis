@@ -6,16 +6,18 @@
   <title>Kinematic Based Coverage and Risk Analysis</title>
   <style>
     :root { color-scheme: dark; }
+
     body {
-    background: #111;
-    color: #eee;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    margin: 24px;
+      background: #111;
+      color: #eee;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 24px;
     }
+
     header { display: grid; gap: 12px; margin-bottom: 16px; }
     .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    input[type="search"] { padding: 10px 12px; min-width: 260px; border-radius: 10px; border: 1px solid #9996; }
-    button, select, label { border-radius: 10px; border: 1px solid #9996; padding: 10px 12px; background: transparent; }
+    input[type="search"] { padding: 10px 12px; min-width: 260px; border-radius: 10px; border: 1px solid #9996; background: transparent; color: inherit; }
+    button, select, label { border-radius: 10px; border: 1px solid #9996; padding: 10px 12px; background: transparent; color: inherit; }
     label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; }
     .meta { opacity: 0.8; font-size: 0.95rem; }
 
@@ -29,7 +31,6 @@
     }
 
     .layout { display: grid; gap: 14px; grid-template-columns: 420px 1fr; align-items: start; }
-    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
 
     .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
     .card {
@@ -72,8 +73,29 @@
 
     .err { border: 1px solid #c33; padding: 12px; border-radius: 12px; }
     .hint { opacity: 0.85; }
-    .pill { font-size: 12px; padding: 4px 8px; border: 1px solid #9996; border-radius: 999px; }
     .hidden { display: none; }
+
+    /* Responsive */
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .viewer { position: static; top: auto; }
+      iframe { height: 70vh; }
+      body { margin: 14px; }
+      input[type="search"] { min-width: 180px; flex: 1; }
+    }
+
+    /* Optional: nicer multi-column list on medium screens, but 1-col on small phones */
+    .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+
+    /* Plot-only mode: opened via ?plot=yourfile.html */
+    .plot-only header,
+    .plot-only #gridWrap {
+      display: none !important;
+    }
+    .plot-only .layout { grid-template-columns: 1fr; }
+    .plot-only #viewer { display: block !important; position: static; border: 0; padding: 0; }
+    .plot-only iframe { height: 100vh !important; border-radius: 0; }
   </style>
 </head>
 <body>
@@ -108,40 +130,41 @@
     <div id="error" class="err hidden"></div>
 
     <div class="desc">
-  <h2>🏈 Kinematics-Based Coverage Gallery</h2>
+      <h2>🏈 Kinematics-Based Coverage Gallery</h2>
 
-  <h3>What this is</h3>
-  <p>
-    This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.
-  </p>
+      <h3>What this is</h3>
+      <p>This gallery visualizes a <strong>kinematics-based coverage model</strong> for NFL passing plays.</p>
 
-  <p>
-    For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:
-  </p>
-  <ul>
-    <li>current speed</li>
-    <li>heading / direction</li>
-  </ul>
+      <p>For each player, a <strong>personalized motion model</strong> estimates the region they can reach over time based on:</p>
+      <ul>
+        <li>current speed</li>
+        <li>heading / direction</li>
+      </ul>
 
-  <p>
-    Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.
-  </p>
+      <p>Combined with a <strong>QB throw-time + throw-distance model</strong>, the plots highlight how pass targets evolve across the field for both offense and defense.</p>
 
-  <hr />
+      <hr />
 
-  <h3>How to read the colors (risk map)</h3>
-  <ul>
-    <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
-    <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
-    <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
-  </ul>
+      <h3>How to read the colors (risk map)</h3>
+      <ul>
+        <li><strong>Blue</strong> = low offensive risk <em>(offense arrives first)</em></li>
+        <li><strong>White</strong> = neutral <em>(simultaneous arrival)</em></li>
+        <li><strong>Red</strong> = higher risk <em>(defense has the time advantage)</em></li>
+      </ul>
 
-  <hr />
+      <hr />
 
+      <h3>Navigation / loading</h3>
+      <ul>
+        <li>The page reads <code>figures/*.html</code> via the <strong>GitHub API</strong> to build the file list.</li>
+        <li>Double-click any card to open a <strong>plot-only</strong> view in a new tab.</li>
+        <li>On mobile the layout stacks and the preview is not sticky.</li>
+      </ul>
+    </div>
   </header>
 
   <main class="layout">
-    <section>
+    <section id="gridWrap">
       <div id="grid" class="grid"></div>
     </section>
 
@@ -155,6 +178,11 @@
   </main>
 
   <script>
+    // Plot-only mode: open index.html?plot=<filename.html>
+    const urlParams = new URLSearchParams(location.search);
+    const plotParam = urlParams.get("plot");
+    if (plotParam) document.documentElement.classList.add("plot-only");
+
     const els = {
       q: document.getElementById("q"),
       preview: document.getElementById("preview"),
@@ -289,7 +317,11 @@
         const branch = await fetchDefaultBranch(owner, repo);
         allFiles = await fetchFiguresList(owner, repo, branch);
 
-        if (!selectedFile || !allFiles.includes(selectedFile)) {
+        // If plot-only mode is requested, select that plot (if it exists)
+        if (plotParam && allFiles.includes(plotParam)) {
+          selectedFile = plotParam;
+          els.preview.checked = true;
+        } else if (!selectedFile || !allFiles.includes(selectedFile)) {
           selectedFile = allFiles[0] || null;
         }
 
@@ -323,14 +355,13 @@
       if (file) selectFile(file);
     });
 
-    // Double-click: open plot in a new tab
+    // Double-click: open plot-only view in a new tab
     els.grid.addEventListener("dblclick", (ev) => {
       const card = ev.target.closest(".card");
       if (!card) return;
       const file = card.getAttribute("data-file");
       if (!file) return;
-      const href = `figures/${encodeURIComponent(file)}`;
-      window.open(href, "_blank", "noopener");
+      window.open(`./?plot=${encodeURIComponent(file)}`, "_blank", "noopener");
     });
 
     // Keyboard accessibility
