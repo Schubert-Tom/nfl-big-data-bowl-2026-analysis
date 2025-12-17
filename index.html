@@ -352,6 +352,11 @@
       // ---- Build layout/data and force consistent palette without losing text ----
       const layout = { ...(fig.layout || {}) };
       layout.autosize = true;
+      layout.uirevision = filename;
+
+      if (Array.isArray(layout.sliders)) {
+        layout.sliders = layout.sliders.map(s => ({ ...s, active: 0 }));
+      }
 
       // Make room on the right so the colorbar never clips
       layout.margin = { ...(layout.margin || {}), l: 60, r: 260, t: 40, b: 120 };
@@ -413,15 +418,25 @@
         { responsive: true, displaylogo: false },
         (fig.config || {})
       );
+
       Plotly.purge(els.plot);
 
       // Render (use the correct Plotly.react signature)
       await Plotly.react(els.plot, data, layout, config);
 
-      // Re-add frames so slider/animation stays interactive
       if (frames.length) {
-        try { await Plotly.addFrames(els.plot, frames); } catch (e) { console.warn("addFrames failed:", e); }
+        await Plotly.addFrames(els.plot, frames);
+
+        // hard reset to first frame
+        const first = frames[0]?.name ?? 0;
+        await Plotly.animate(
+          els.plot,
+          [first],
+          { mode: "immediate", frame: { duration: 0, redraw: true }, transition: { duration: 0 } }
+        );
       }
+
+
     }
 
     async function selectFile(filename, {openInNewTab=false} = {}) {
